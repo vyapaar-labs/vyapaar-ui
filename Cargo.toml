@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/vyapaar-ui-app",
+  "crates/vyapaar-ui-core",
+  "crates/vyapaar-ui-client",
+  "crates/vyapaar-ui-api-wasm",
+  "crates/vyapaar-ui-assets",
+  "crates/vyapaar-ui-charts",
+  "crates/vyapaar-cli",
+  "crates/vyapaar-tui",
+  "crates/vyapaar-highlight",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "AGPL-3.0"
+repository = "https://github.com/vyapaar-labs/vyapaar-ui"
+
+[workspace.dependencies]
+vyapaar-core = { path = "../vyapaar-core" }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tracing = "0.1"

@@ -1,0 +1,1 @@
+//! vyapaar-ui-assets implementation.
