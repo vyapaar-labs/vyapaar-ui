@@ -3,8 +3,15 @@ name = "vyapaar-ui-client"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "WASM-safe UI event model and subscription stream for the Vyapaar workstation"
+
+[lib]
+name = "vyapaar_ui_client"
 
 [dependencies]
-vyapaar-core = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
+vyapaar-core.workspace = true
+vyapaar-ui-core.workspace = true
+serde.workspace = true
+thiserror.workspace = true
