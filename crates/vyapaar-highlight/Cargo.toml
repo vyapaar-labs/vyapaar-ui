@@ -3,8 +3,11 @@ name = "vyapaar-highlight"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Zero-I/O WASM-safe hand-rolled syntax highlighter for the Vyapaar workstation"
+
+[lib]
+name = "vyapaar_highlight"
 
 [dependencies]
-vyapaar-core = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
