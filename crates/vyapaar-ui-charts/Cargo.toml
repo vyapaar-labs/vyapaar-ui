@@ -3,8 +3,14 @@ name = "vyapaar-ui-charts"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Decimal-precise chart geometry primitives for the Vyapaar workstation (openalgo-charts bridge)"
+
+[lib]
+name = "vyapaar_ui_charts"
 
 [dependencies]
-vyapaar-core = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
+vyapaar-core.workspace = true
+rust_decimal.workspace = true
+serde.workspace = true
