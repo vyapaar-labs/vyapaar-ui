@@ -11,14 +11,23 @@ fn dec(s: &str) -> Decimal {
 fn call_intrinsic_at_expiry() {
     assert_eq!(payoff(OptionType::Call, dec("105"), dec("100")), dec("5"));
     // At or below strike, call payoff is zero.
-    assert_eq!(payoff(OptionType::Call, dec("100"), dec("100")), Decimal::ZERO);
-    assert_eq!(payoff(OptionType::Call, dec("95"), dec("100")), Decimal::ZERO);
+    assert_eq!(
+        payoff(OptionType::Call, dec("100"), dec("100")),
+        Decimal::ZERO
+    );
+    assert_eq!(
+        payoff(OptionType::Call, dec("95"), dec("100")),
+        Decimal::ZERO
+    );
 }
 
 #[test]
 fn put_intrinsic_at_expiry() {
     assert_eq!(payoff(OptionType::Put, dec("95"), dec("100")), dec("5"));
-    assert_eq!(payoff(OptionType::Put, dec("105"), dec("100")), Decimal::ZERO);
+    assert_eq!(
+        payoff(OptionType::Put, dec("105"), dec("100")),
+        Decimal::ZERO
+    );
 }
 
 #[test]
@@ -34,5 +43,12 @@ fn net_payoff_subtracts_premium() {
 fn payoff_curve_spans_spot_range() {
     let spots = vec![dec("90"), dec("100"), dec("110")];
     let curve = payoff_curve(OptionType::Call, dec("100"), &spots);
-    assert_eq!(curve, vec![(dec("90"), Decimal::ZERO), (dec("100"), Decimal::ZERO), (dec("110"), dec("10"))]);
+    assert_eq!(
+        curve,
+        vec![
+            (dec("90"), Decimal::ZERO),
+            (dec("100"), Decimal::ZERO),
+            (dec("110"), dec("10"))
+        ]
+    );
 }

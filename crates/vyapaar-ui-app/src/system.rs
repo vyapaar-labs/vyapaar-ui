@@ -81,7 +81,12 @@ impl SystemFeature {
     /// Update a subsystem's state.
     ///
     /// Returns `false` when no subsystem with that name exists.
-    pub fn set_subsystem(&mut self, name: &str, state: SubsystemState, detail: impl Into<String>) -> bool {
+    pub fn set_subsystem(
+        &mut self,
+        name: &str,
+        state: SubsystemState,
+        detail: impl Into<String>,
+    ) -> bool {
         let Some(row) = self.subsystems.iter_mut().find(|r| r.name == name) else {
             return false;
         };

@@ -20,7 +20,10 @@ fn navigate_records_previous() {
 #[test]
 fn navigate_to_same_route_errors() {
     let mut r = Router::new(AppRoute::Studio);
-    assert_eq!(r.navigate(AppRoute::Studio), Err(RouterError::AlreadyActive));
+    assert_eq!(
+        r.navigate(AppRoute::Studio),
+        Err(RouterError::AlreadyActive)
+    );
     assert_eq!(r.active, AppRoute::Studio);
 }
 

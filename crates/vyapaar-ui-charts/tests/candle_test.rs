@@ -33,19 +33,32 @@ fn candle_from_bar_maps_ohlc() {
 
 #[test]
 fn candle_direction_and_ranges() {
-    let bull = Candle::new(Price::new(dec("100")), Price::new(dec("105")), Price::new(dec("99")), Price::new(dec("104")));
+    let bull = Candle::new(
+        Price::new(dec("100")),
+        Price::new(dec("105")),
+        Price::new(dec("99")),
+        Price::new(dec("104")),
+    );
     assert!(bull.is_bullish());
     assert_eq!(bull.body(), dec("4"));
     assert_eq!(bull.range(), dec("6"));
 
-    let bear = Candle::new(Price::new(dec("100")), Price::new(dec("101")), Price::new(dec("90")), Price::new(dec("92")));
+    let bear = Candle::new(
+        Price::new(dec("100")),
+        Price::new(dec("101")),
+        Price::new(dec("90")),
+        Price::new(dec("92")),
+    );
     assert!(!bear.is_bullish());
     assert_eq!(bear.body(), dec("8"));
 }
 
 #[test]
 fn chart_from_bars_preserves_order() {
-    let bars = vec![bar("100", "105", "99", "104"), bar("104", "108", "103", "107")];
+    let bars = vec![
+        bar("100", "105", "99", "104"),
+        bar("104", "108", "103", "107"),
+    ];
     let chart = CandlestickChart::from_bars(&bars);
     assert_eq!(chart.candles.len(), 2);
     assert_eq!(chart.candles[1].close, dec("107"));
@@ -54,18 +67,34 @@ fn chart_from_bars_preserves_order() {
 #[test]
 fn price_range_covers_all_extremes() {
     let candles = vec![
-        Candle::new(Price::new(dec("100")), Price::new(dec("110")), Price::new(dec("90")), Price::new(dec("105"))),
-        Candle::new(Price::new(dec("105")), Price::new(dec("120")), Price::new(dec("95")), Price::new(dec("115"))),
+        Candle::new(
+            Price::new(dec("100")),
+            Price::new(dec("110")),
+            Price::new(dec("90")),
+            Price::new(dec("105")),
+        ),
+        Candle::new(
+            Price::new(dec("105")),
+            Price::new(dec("120")),
+            Price::new(dec("95")),
+            Price::new(dec("115")),
+        ),
     ];
     assert_eq!(CandlestickChart::price_range(&candles), dec("30"));
 }
 
 #[test]
 fn y_for_price_maps_high_to_top() {
-    let candles = vec![
-        Candle::new(Price::new(dec("100")), Price::new(dec("110")), Price::new(dec("90")), Price::new(dec("105"))),
-    ];
-    let chart = CandlestickChart { candles, price_range: dec("20") };
+    let candles = vec![Candle::new(
+        Price::new(dec("100")),
+        Price::new(dec("110")),
+        Price::new(dec("90")),
+        Price::new(dec("105")),
+    )];
+    let chart = CandlestickChart {
+        candles,
+        price_range: dec("20"),
+    };
     let h = 100u32;
     // max price (110) → y=0
     assert_eq!(chart.y_for_price(dec("110"), h), Ok(0));
@@ -79,15 +108,24 @@ fn y_for_price_maps_high_to_top() {
 #[test]
 fn y_for_price_errors() {
     let chart = CandlestickChart::from_bars(&[]);
-    assert_eq!(chart.y_for_price(dec("100"), 100), Err(GeometryError::EmptySeries));
+    assert_eq!(
+        chart.y_for_price(dec("100"), 100),
+        Err(GeometryError::EmptySeries)
+    );
 
     let bars = vec![bar("100", "105", "99", "104")];
     let chart = CandlestickChart::from_bars(&bars);
-    assert_eq!(chart.y_for_price(dec("100"), 0), Err(GeometryError::ZeroViewport));
+    assert_eq!(
+        chart.y_for_price(dec("100"), 0),
+        Err(GeometryError::ZeroViewport)
+    );
 
     let flat = vec![bar("100", "100", "100", "100")];
     let chart = CandlestickChart::from_bars(&flat);
-    assert_eq!(chart.y_for_price(dec("100"), 100), Err(GeometryError::FlatPriceRange));
+    assert_eq!(
+        chart.y_for_price(dec("100"), 100),
+        Err(GeometryError::FlatPriceRange)
+    );
 }
 
 #[test]

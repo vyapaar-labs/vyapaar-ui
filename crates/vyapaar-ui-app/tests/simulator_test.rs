@@ -20,8 +20,14 @@ fn run_lifecycle_idle_to_complete() {
     let mut s = SimulatorFeature::new();
     s.start();
     assert_eq!(s.phase, SimulatorPhase::Running);
-    s.push_equity(EquityCurvePoint { index: 0, equity: dec("100000") });
-    s.push_equity(EquityCurvePoint { index: 1, equity: dec("102000") });
+    s.push_equity(EquityCurvePoint {
+        index: 0,
+        equity: dec("100000"),
+    });
+    s.push_equity(EquityCurvePoint {
+        index: 1,
+        equity: dec("102000"),
+    });
     s.complete(dec("0.02"), dec("0.05"), dec("1.2"));
     assert_eq!(s.phase, SimulatorPhase::Complete);
     assert!(s.has_results());
@@ -33,11 +39,17 @@ fn run_lifecycle_idle_to_complete() {
 fn push_equity_only_in_running_phase() {
     let mut s = SimulatorFeature::new();
     // Idle: pushes are ignored.
-    s.push_equity(EquityCurvePoint { index: 0, equity: dec("1") });
+    s.push_equity(EquityCurvePoint {
+        index: 0,
+        equity: dec("1"),
+    });
     assert!(s.equity_curve.is_empty());
 
     s.start();
-    s.push_equity(EquityCurvePoint { index: 0, equity: dec("1") });
+    s.push_equity(EquityCurvePoint {
+        index: 0,
+        equity: dec("1"),
+    });
     assert_eq!(s.equity_curve.len(), 1);
 }
 

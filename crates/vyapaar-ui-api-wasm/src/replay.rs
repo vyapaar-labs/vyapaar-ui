@@ -61,7 +61,9 @@ pub fn replay_ticks<'a>(ticks: impl IntoIterator<Item = &'a Tick>) -> Option<Pos
 fn tick_volume(tick: &Tick) -> Option<Quantity> {
     match tick {
         Tick::Ltp { volume, .. } => Some(*volume),
-        Tick::Quote { bid_qty, ask_qty, .. } => Some(Quantity::new(bid_qty.value() + ask_qty.value())),
+        Tick::Quote {
+            bid_qty, ask_qty, ..
+        } => Some(Quantity::new(bid_qty.value() + ask_qty.value())),
         Tick::Depth { bids, asks, .. } => {
             let bid_vol = bids.iter().map(|b| b.quantity.value()).sum::<Decimal>();
             let ask_vol = asks.iter().map(|a| a.quantity.value()).sum::<Decimal>();

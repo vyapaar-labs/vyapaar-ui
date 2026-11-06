@@ -23,7 +23,14 @@ fn tick() -> Tick {
 #[test]
 fn event_kind_classification() {
     assert_eq!(ClientEvent::Tick(tick()).kind(), EventKind::MarketData);
-    assert_eq!(ClientEvent::System(SystemStatus { healthy: true, message: "ok".into() }).kind(), EventKind::System);
+    assert_eq!(
+        ClientEvent::System(SystemStatus {
+            healthy: true,
+            message: "ok".into()
+        })
+        .kind(),
+        EventKind::System
+    );
 }
 
 #[test]
@@ -31,7 +38,10 @@ fn subscriber_receives_published_events_in_order() {
     let mut stream = EventStream::new();
     let sub = stream.subscribe();
     stream.publish(ClientEvent::Tick(tick()));
-    stream.publish(ClientEvent::System(SystemStatus { healthy: true, message: "ok".into() }));
+    stream.publish(ClientEvent::System(SystemStatus {
+        healthy: true,
+        message: "ok".into(),
+    }));
     let events = sub.drain();
     assert_eq!(events.len(), 2);
     assert_eq!(events[0].kind(), EventKind::MarketData);

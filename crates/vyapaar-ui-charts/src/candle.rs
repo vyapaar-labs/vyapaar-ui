@@ -91,7 +91,10 @@ impl CandlestickChart {
     pub fn from_bars(bars: &[Bar]) -> Self {
         let candles = bars.iter().map(Candle::from).collect::<Vec<_>>();
         let price_range = Self::price_range(&candles);
-        Self { candles, price_range }
+        Self {
+            candles,
+            price_range,
+        }
     }
 
     /// The overall min/max price span of a candle series.
@@ -149,8 +152,7 @@ impl CandlestickChart {
         // y grows downward: min price → bottom (height-1), max price → 0.
         let y = height_d - (ratio * height_d);
         let y = y.round();
-        Ok(y
-            .to_u16()
+        Ok(y.to_u16()
             .unwrap_or(0)
             .min(u16::try_from(height.saturating_sub(1)).unwrap_or(u16::MAX)))
     }

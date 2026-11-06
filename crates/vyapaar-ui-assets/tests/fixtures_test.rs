@@ -3,8 +3,8 @@
 use rust_decimal::Decimal;
 use vyapaar_core::market::Tick;
 use vyapaar_ui_assets::fixtures::{
-    filter_chips, portfolio_snapshot, reliance, reliance_bars, reliance_quote_tick, screener_request,
-    tcs_depth_tick,
+    filter_chips, portfolio_snapshot, reliance, reliance_bars, reliance_quote_tick,
+    screener_request, tcs_depth_tick,
 };
 
 #[test]

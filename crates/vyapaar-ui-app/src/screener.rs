@@ -61,15 +61,18 @@ impl ScreenerFeature {
         if name.trim().is_empty() {
             return Err(ScreenerFeatureError::InvalidMetric);
         }
-        self.request.filters.predicates.push(ScreenerFilterPredicate {
-            metric: MetricRef(MetricKeySpec {
-                metric: name,
-                period: MetricPeriod::D1,
-            }),
-            op,
-            value,
-            value_upper,
-        });
+        self.request
+            .filters
+            .predicates
+            .push(ScreenerFilterPredicate {
+                metric: MetricRef(MetricKeySpec {
+                    metric: name,
+                    period: MetricPeriod::D1,
+                }),
+                op,
+                value,
+                value_upper,
+            });
         Ok(())
     }
 

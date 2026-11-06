@@ -17,23 +17,44 @@ fn notional_is_price_times_quantity() {
 
 #[test]
 fn long_pnl_profit_and_loss() {
-    let profit = pnl(OrderSide::Buy, Price::new(dec("100")), Price::new(dec("110")), Quantity::from_u64(5));
+    let profit = pnl(
+        OrderSide::Buy,
+        Price::new(dec("100")),
+        Price::new(dec("110")),
+        Quantity::from_u64(5),
+    );
     assert_eq!(profit.amount, dec("50"));
 
-    let loss = pnl(OrderSide::Buy, Price::new(dec("100")), Price::new(dec("90")), Quantity::from_u64(5));
+    let loss = pnl(
+        OrderSide::Buy,
+        Price::new(dec("100")),
+        Price::new(dec("90")),
+        Quantity::from_u64(5),
+    );
     assert_eq!(loss.amount, dec("-50"));
 }
 
 #[test]
 fn short_pnl_inverts() {
-    let profit = pnl(OrderSide::Sell, Price::new(dec("100")), Price::new(dec("90")), Quantity::from_u64(5));
+    let profit = pnl(
+        OrderSide::Sell,
+        Price::new(dec("100")),
+        Price::new(dec("90")),
+        Quantity::from_u64(5),
+    );
     assert_eq!(profit.amount, dec("50"));
 }
 
 #[test]
 fn mtm_uses_current_price() {
     let inst = InstrumentId::new(Exchange::Nse, "TCS");
-    let m = mtm(&inst, OrderSide::Buy, Price::new(dec("100")), Price::new(dec("105")), Quantity::from_u64(2));
+    let m = mtm(
+        &inst,
+        OrderSide::Buy,
+        Price::new(dec("100")),
+        Price::new(dec("105")),
+        Quantity::from_u64(2),
+    );
     assert_eq!(m.amount, dec("10"));
 }
 

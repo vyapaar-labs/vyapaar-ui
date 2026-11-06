@@ -27,9 +27,7 @@ pub fn sharpe_ratio(returns: &[Decimal], periods_per_year: u32) -> Result<Decima
     if std.is_zero() {
         return Err(ApiError::InsufficientData);
     }
-    let scale = Decimal::from(periods_per_year)
-        .sqrt()
-        .unwrap_or_default();
+    let scale = Decimal::from(periods_per_year).sqrt().unwrap_or_default();
     Ok((mean / std) * scale)
 }
 
@@ -48,9 +46,7 @@ pub fn sortino_ratio(returns: &[Decimal], periods_per_year: u32) -> Result<Decim
     if downside.is_zero() {
         return Err(ApiError::InsufficientData);
     }
-    let scale = Decimal::from(periods_per_year)
-        .sqrt()
-        .unwrap_or_default();
+    let scale = Decimal::from(periods_per_year).sqrt().unwrap_or_default();
     Ok((mean / downside) * scale)
 }
 

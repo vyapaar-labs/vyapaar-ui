@@ -3,10 +3,10 @@
 //! Uses `ratatui::TestBackend`-style pure state assertions and scripted
 //! `crossterm` key fixtures — no live terminal required.
 
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::layout::Rect;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::layout::Rect;
 use vyapaar_highlight::HighlightClass;
 use vyapaar_tui::agent_chat::{AgentMessage, AgentRole, ChatTranscript};
 use vyapaar_tui::app::{ActiveTab, TuiApp};
@@ -47,7 +47,10 @@ fn tab_titles() {
 fn keybindings_map_chars_and_navigation() {
     assert_eq!(handle_key(key(KeyCode::Char('q'))), Some(Action::Quit));
     assert_eq!(handle_key(key(KeyCode::Char('l'))), Some(Action::NextTab));
-    assert_eq!(handle_key(key(KeyCode::Char('h'))), Some(Action::PreviousTab));
+    assert_eq!(
+        handle_key(key(KeyCode::Char('h'))),
+        Some(Action::PreviousTab)
+    );
     assert_eq!(handle_key(key(KeyCode::Down)), Some(Action::Down));
     assert_eq!(handle_key(key(KeyCode::Char('j'))), Some(Action::Down));
     assert_eq!(handle_key(key(KeyCode::Enter)), Some(Action::Submit));

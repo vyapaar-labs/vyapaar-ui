@@ -18,8 +18,8 @@ pub mod home;
 pub mod screener;
 
 pub use atoms::{
-    Accent, Badge, BadgeTone, Delta, EquityPoint, MetricValue, Spacing, StatusPill, Tag,
-    TextAlign, TrendDirection, TrendPill,
+    Accent, Badge, BadgeTone, Delta, EquityPoint, MetricValue, Spacing, StatusPill, Tag, TextAlign,
+    TrendDirection, TrendPill,
 };
 pub use home::{AccountSummary, MarketStatus, MarketStatusKind, WatchlistRow};
 pub use screener::{

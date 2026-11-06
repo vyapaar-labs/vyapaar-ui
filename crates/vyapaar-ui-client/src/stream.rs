@@ -19,7 +19,10 @@ pub struct Subscription {
 
 impl Drop for Subscription {
     fn drop(&mut self) {
-        self.stream.borrow_mut().subscribers.retain(|s| s.id != self.id);
+        self.stream
+            .borrow_mut()
+            .subscribers
+            .retain(|s| s.id != self.id);
     }
 }
 
@@ -97,7 +100,10 @@ impl EventStream {
         let id = self.next_id;
         self.next_id += 1;
         let seen = self.counter();
-        self.inner.borrow_mut().subscribers.push(Subscriber { id, seen });
+        self.inner
+            .borrow_mut()
+            .subscribers
+            .push(Subscriber { id, seen });
         Subscription {
             stream: Rc::clone(&self.inner),
             id,

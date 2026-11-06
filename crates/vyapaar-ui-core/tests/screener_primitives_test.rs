@@ -2,7 +2,7 @@
 
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
-use vyapaar_core::screener::{FilterOp, MetricKeySpec, MetricRef, MetricPeriod};
+use vyapaar_core::screener::{FilterOp, MetricKeySpec, MetricPeriod, MetricRef};
 use vyapaar_core::types::{Exchange, InstrumentId};
 use vyapaar_ui_core::screener::{
     ColumnAlign, ScreenerColumn, ScreenerFilterChip, ScreenerRowModel, ScreenerSort,
@@ -33,7 +33,9 @@ fn column_align_defaults_left() {
 
 #[test]
 fn column_right_aligned_and_width_clamped() {
-    let col = ScreenerColumn::new("ltp", "LTP").right_aligned().with_width(42);
+    let col = ScreenerColumn::new("ltp", "LTP")
+        .right_aligned()
+        .with_width(42);
     assert_eq!(col.align, ColumnAlign::Right);
     assert_eq!(col.width, 10);
 }

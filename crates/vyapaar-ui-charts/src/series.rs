@@ -3,7 +3,7 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::axis::{ChartRange, tick_positions, AxisTicks};
+use crate::axis::{AxisTicks, ChartRange, tick_positions};
 
 /// A single x/y point in a series (both exact Decimal).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -60,7 +60,13 @@ fn rsi_short_series_is_all_none() {
 fn rsi_known_value() {
     // A gentle mixed series: RSI(5) should be strictly between 0 and 100.
     let values = vec![
-        dec("10"), dec("11"), dec("10.5"), dec("12"), dec("11"), dec("12.5"), dec("13"),
+        dec("10"),
+        dec("11"),
+        dec("10.5"),
+        dec("12"),
+        dec("11"),
+        dec("12.5"),
+        dec("13"),
     ];
     let out = rsi(&values, 5).unwrap();
     let r = out[5].expect("rsi at index 5");

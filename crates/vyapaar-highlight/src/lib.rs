@@ -11,8 +11,8 @@
 //! - **WASM-safe**: no tree-sitter, no WASM grammar blobs, no native codegen.
 //!   A small hand-rolled char lexer per language.
 //! - **No runtime dependencies** beyond `std`.
-//! - **Tests live in `tests/`** (parallel test directory rule — zero
-//!   `#[cfg(test)]` inside `src/`).
+//! - **Tests live in `tests/`** (parallel test directory rule — zero test
+//!   modules inside `src/`).
 
 use std::ops::Range;
 
@@ -191,8 +191,8 @@ struct LexSyntax {
 const RUST_KEYWORDS: &[&str] = &[
     "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern",
     "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
-    "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe",
-    "use", "where", "while", "yield",
+    "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type",
+    "unsafe", "use", "where", "while", "yield",
 ];
 
 /// Keywords for the Python lexer.
@@ -298,9 +298,7 @@ fn highlight_keyworded(src: &str, keywords: &[&str], syntax: LexSyntax) -> Vec<H
         }
 
         // Number literal.
-        if c.is_ascii_digit()
-            || (c == '.' && bytes.get(i + 1).is_some_and(u8::is_ascii_digit))
-        {
+        if c.is_ascii_digit() || (c == '.' && bytes.get(i + 1).is_some_and(u8::is_ascii_digit)) {
             let start = i;
             i = number_end(src, i);
             spans.push(HighlightSpan::new(start..i, HighlightClass::Number));
@@ -399,7 +397,10 @@ fn highlight_markdown(src: &str) -> Vec<HighlightSpan> {
             let pair = if c == '*' { "**" } else { "__" };
             if let Some(rel) = src[i + 2..].find(pair) {
                 let content_end = i + 2 + rel + 2;
-                spans.push(HighlightSpan::new(start..content_end, HighlightClass::Keyword));
+                spans.push(HighlightSpan::new(
+                    start..content_end,
+                    HighlightClass::Keyword,
+                ));
                 i = content_end;
                 continue;
             }

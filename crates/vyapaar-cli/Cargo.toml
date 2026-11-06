@@ -3,15 +3,25 @@ name = "vyapaar-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Vyapaar developer CLI: tui, ask, scan, health subcommands"
+
+[lib]
+name = "vyapaar_cli"
+
+[[bin]]
+name = "vyapaar"
+path = "src/main.rs"
 
 [dependencies]
-vyapaar-core = { workspace = true }
-vyapaar-agent-core = { workspace = true }
-vyapaar-agent-chat = { workspace = true }
-vyapaar-agent-llm = { workspace = true }
-vyapaar-agent-prompt = { workspace = true }
-vyapaar-tui = { workspace = true }
-tokio = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
+vyapaar-core.workspace = true
+vyapaar-ui-core.workspace = true
+vyapaar-tui.workspace = true
+vyapaar-highlight.workspace = true
+clap.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

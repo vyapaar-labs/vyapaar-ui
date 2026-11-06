@@ -80,6 +80,12 @@ fn predicate_matches(pred: &ScreenerFilterPredicate, row: &ScreenerRow) -> bool 
 }
 
 /// Build a `ScreenerRow` helper for tests/consumers.
-pub fn row(instrument: vyapaar_core::types::InstrumentId, metrics: BTreeMap<String, Decimal>) -> ScreenerRow {
-    ScreenerRow { instrument, metrics }
+pub fn row(
+    instrument: vyapaar_core::types::InstrumentId,
+    metrics: BTreeMap<String, Decimal>,
+) -> ScreenerRow {
+    ScreenerRow {
+        instrument,
+        metrics,
+    }
 }

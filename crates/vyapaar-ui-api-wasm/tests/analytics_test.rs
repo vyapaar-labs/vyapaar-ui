@@ -1,8 +1,8 @@
 //! Tests for analytics bindings.
 
 use rust_decimal::Decimal;
-use vyapaar_ui_api_wasm::analytics::{drawdown, sharpe_ratio, sortino_ratio};
 use vyapaar_ui_api_wasm::ApiError;
+use vyapaar_ui_api_wasm::analytics::{drawdown, sharpe_ratio, sortino_ratio};
 
 fn dec(s: &str) -> Decimal {
     s.parse().unwrap()
@@ -16,23 +16,40 @@ fn sharpe_of_constant_returns_errors() {
 
 #[test]
 fn sharpe_positive_for_uptrending_series() {
-    let returns = vec![dec("0.01"), dec("0.02"), dec("0.015"), dec("0.03"), dec("0.02")];
+    let returns = vec![
+        dec("0.01"),
+        dec("0.02"),
+        dec("0.015"),
+        dec("0.03"),
+        dec("0.02"),
+    ];
     let s = sharpe_ratio(&returns, 252).unwrap();
     assert!(s > Decimal::ZERO);
 }
 
 #[test]
 fn sharpe_insufficient_data() {
-    assert_eq!(sharpe_ratio(&[dec("0.01")], 252), Err(ApiError::InsufficientData));
+    assert_eq!(
+        sharpe_ratio(&[dec("0.01")], 252),
+        Err(ApiError::InsufficientData)
+    );
     assert_eq!(
         sharpe_ratio(&[dec("0.01"), dec("0.02")], 0),
-        Err(ApiError::InvalidArgument("periods_per_year must be > 0".to_string()))
+        Err(ApiError::InvalidArgument(
+            "periods_per_year must be > 0".to_string()
+        ))
     );
 }
 
 #[test]
 fn sortino_positive_for_uptrending_series() {
-    let returns = vec![dec("0.01"), dec("0.02"), dec("0.015"), dec("0.03"), dec("0.02")];
+    let returns = vec![
+        dec("0.01"),
+        dec("0.02"),
+        dec("0.015"),
+        dec("0.03"),
+        dec("0.02"),
+    ];
     let s = sortino_ratio(&returns, 252).unwrap();
     assert!(s > Decimal::ZERO);
 }

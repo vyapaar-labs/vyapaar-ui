@@ -53,10 +53,7 @@ pub fn tick_positions(range: ChartRange, n: usize) -> AxisTicks {
     if span.is_zero() {
         values.push(range.min);
         values.push(range.max);
-        return AxisTicks {
-            values,
-            range,
-        };
+        return AxisTicks { values, range };
     }
     let step = span / Decimal::from(count.saturating_sub(1));
     for i in 0..count {

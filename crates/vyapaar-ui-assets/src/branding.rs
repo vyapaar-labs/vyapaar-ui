@@ -24,7 +24,11 @@ pub struct Branding {
 
 impl Branding {
     /// Create a new branding bundle.
-    pub fn new(name: impl Into<String>, tagline: impl Into<String>, version: impl Into<String>) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        tagline: impl Into<String>,
+        version: impl Into<String>,
+    ) -> Self {
         Self {
             name: name.into(),
             tagline: tagline.into(),

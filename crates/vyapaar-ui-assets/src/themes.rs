@@ -84,7 +84,11 @@ pub struct Theme {
 
 /// All themes in a stable order.
 pub fn all_themes() -> [Theme; 3] {
-    [theme(ThemeId::Dark), theme(ThemeId::Light), theme(ThemeId::Amber)]
+    [
+        theme(ThemeId::Dark),
+        theme(ThemeId::Light),
+        theme(ThemeId::Amber),
+    ]
 }
 
 /// Look up a theme by id.

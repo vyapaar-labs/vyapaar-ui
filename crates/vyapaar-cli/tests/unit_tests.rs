@@ -1,73 +1,107 @@
-use vyapaar_cli::{CliArgs, Command, run_command};
+//! Unit tests for the Vyapaar CLI.
 
-#[tokio::test]
-async fn test_cli_tui_command() {
-    let args = CliArgs::new(Command::Tui);
-    let out = run_command(args).await.expect("tui run");
-    assert!(out.contains("TUI initialized"));
+use vyapaar_cli::args::{AskArgs, CliArgs, Command, ScanArgs};
+use vyapaar_cli::runner::{CliError, CommandOutcome, run};
+
+#[test]
+fn parse_cli_roundtrip_tui() {
+    let cli = vyapaar_cli::args::Cli {
+        command: vyapaar_cli::args::CliCommand::Tui,
+    };
+    let args: CliArgs = cli.into();
+    assert_eq!(args.command, Command::Tui);
 }
 
-#[tokio::test]
-async fn test_cli_ask_command() {
-    let args = CliArgs::new(Command::Ask {
-        query: "What is my current margin?".to_string(),
-        profile: Some("algo_client".to_string()),
-        mode: Some("paper".to_string()),
-        persona: None,
-    });
-    let out = run_command(args).await.expect("ask run");
-    assert!(out.contains("Answering query 'What is my current margin?'"));
-    assert!(out.contains("algo_client"));
+#[test]
+fn parse_cli_roundtrip_ask() {
+    let cli = vyapaar_cli::args::Cli {
+        command: vyapaar_cli::args::CliCommand::Ask {
+            prompt: "what is NIFTY?".into(),
+        },
+    };
+    let args: CliArgs = cli.into();
+    assert_eq!(
+        args.command,
+        Command::Ask(AskArgs {
+            prompt: "what is NIFTY?".into()
+        })
+    );
 }
 
-#[tokio::test]
-async fn test_cli_ask_with_persona_command() {
-    let args = CliArgs::new(Command::Ask {
-        query: "Compute walk-forward Sharpe".to_string(),
-        profile: Some("quant_desk".to_string()),
-        mode: Some("backtest".to_string()),
-        persona: Some("quant".to_string()),
-    });
-    let out = run_command(args).await.expect("ask with persona run");
-    assert!(out.contains("[Quant]"));
-    assert!(out.contains("Compute walk-forward Sharpe"));
+#[test]
+fn parse_cli_roundtrip_scan() {
+    let cli = vyapaar_cli::args::Cli {
+        command: vyapaar_cli::args::CliCommand::Scan {
+            query: "roe>15".into(),
+        },
+    };
+    let args: CliArgs = cli.into();
+    assert_eq!(
+        args.command,
+        Command::Scan(ScanArgs {
+            query: "roe>15".into()
+        })
+    );
 }
 
-#[tokio::test]
-async fn test_cli_skills_list_command() {
-    let args = CliArgs::new(Command::Skills { action: None });
-    let out = run_command(args).await.expect("skills list");
-    assert!(out.contains("Installed Default Vyapaar Agent Skills"));
-    assert!(out.contains("quant"));
-    assert!(out.contains("analyst"));
-    assert!(out.contains("risk-manager"));
-    assert!(out.contains("trader"));
+#[test]
+fn run_tui_reports_launch() {
+    let cli = CliArgs {
+        command: Command::Tui,
+    };
+    assert_eq!(run(&cli).unwrap(), CommandOutcome::LaunchedTui);
 }
 
-#[tokio::test]
-async fn test_cli_skills_info_command() {
-    let args = CliArgs::new(Command::Skills {
-        action: Some("info trader".to_string()),
-    });
-    let out = run_command(args).await.expect("skills info");
-    assert!(out.contains("Skill: trader"));
-    assert!(out.contains("Title: Trader"));
-    assert!(out.contains("vyapaar_ticker_price"));
+#[test]
+fn run_ask_fails_with_not_wired() {
+    let cli = CliArgs {
+        command: Command::Ask(AskArgs {
+            prompt: "hello".into(),
+        }),
+    };
+    assert_eq!(run(&cli), Err(CliError::NotWired("vyapaar ask".into())));
 }
 
-#[tokio::test]
-async fn test_cli_scan_command() {
-    let args = CliArgs::new(Command::Scan {
-        universe: Some("nifty_bank".to_string()),
-        metric: Some("bollinger_pct_b".to_string()),
-    });
-    let out = run_command(args).await.expect("scan run");
-    assert!(out.contains("nifty_bank"));
+#[test]
+fn run_scan_fails_with_not_wired() {
+    let cli = CliArgs {
+        command: Command::Scan(ScanArgs {
+            query: "pe<20".into(),
+        }),
+    };
+    assert_eq!(run(&cli), Err(CliError::NotWired("vyapaar scan".into())));
 }
 
-#[tokio::test]
-async fn test_cli_health_command() {
-    let args = CliArgs::new(Command::Health);
-    let out = run_command(args).await.expect("health run");
-    assert!(out.contains("System health: OK"));
+#[test]
+fn run_health_reports_environment() {
+    let cli = CliArgs {
+        command: Command::Health,
+    };
+    let outcome = run(&cli).unwrap();
+    match outcome {
+        CommandOutcome::HealthReport(report) => {
+            assert!(report.contains("vyapaar"));
+            assert!(report.contains("tui ready"));
+        }
+        other => panic!("expected health report, got {other:?}"),
+    }
+}
+
+#[test]
+fn run_ask_empty_prompt_errors() {
+    let cli = CliArgs {
+        command: Command::Ask(AskArgs {
+            prompt: "  ".into(),
+        }),
+    };
+    assert!(run(&cli).is_err());
+}
+
+#[test]
+fn error_display_is_human_readable() {
+    let err = CliError::NotWired("vyapaar ask".into());
+    assert_eq!(
+        err.to_string(),
+        "`vyapaar ask` is not wired to a backend yet"
+    );
 }

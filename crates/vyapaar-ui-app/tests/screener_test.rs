@@ -35,7 +35,8 @@ fn new_feature_starts_empty() {
 #[test]
 fn add_filter_appends_predicate() {
     let mut f = ScreenerFeature::new();
-    f.add_filter("pe", FilterOp::Between, dec("10"), Some(dec("30"))).unwrap();
+    f.add_filter("pe", FilterOp::Between, dec("10"), Some(dec("30")))
+        .unwrap();
     assert_eq!(f.request.filters.predicates.len(), 1);
     assert_eq!(f.request.filters.predicates[0].metric.0.metric, "pe");
 }

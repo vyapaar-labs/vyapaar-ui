@@ -1,6 +1,6 @@
 //! Unit tests for the zero-I/O syntax highlighter (`vyapaar-highlight`).
 
-use vyapaar_highlight::{highlight_code, HighlightClass, HighlightSpan, Language};
+use vyapaar_highlight::{HighlightClass, HighlightSpan, Language, highlight_code};
 
 /// Helper: collect `(class, text)` pairs for a language so assertions read
 /// naturally.
@@ -101,7 +101,11 @@ fn markdown_headings_code_and_bold() {
     assert!(pairs.contains(&(HighlightClass::Keyword, "**bold**")));
     assert!(pairs.contains(&(HighlightClass::String, "`code`")));
     // The fence line itself is highlighted as a Function-class run.
-    assert!(pairs.iter().any(|(c, t)| *c == HighlightClass::Function && t.contains("```")));
+    assert!(
+        pairs
+            .iter()
+            .any(|(c, t)| *c == HighlightClass::Function && t.contains("```"))
+    );
 }
 
 #[test]
@@ -165,5 +169,8 @@ fn unclosed_string_goes_to_end() {
 fn number_leading_dot() {
     let src = "let x = .5;";
     let pairs = classes_and_text(Language::Rust, src);
-    assert!(pairs.contains(&(HighlightClass::Number, ".5")), "got {pairs:?}");
+    assert!(
+        pairs.contains(&(HighlightClass::Number, ".5")),
+        "got {pairs:?}"
+    );
 }

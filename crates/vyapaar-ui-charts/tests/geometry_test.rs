@@ -12,7 +12,10 @@ fn dec(s: &str) -> Decimal {
 
 fn bars() -> Vec<Bar> {
     let inst = InstrumentId::new(Exchange::Nse, "NIFTY50-INDEX");
-    let prices = [("15000", "15050", "14900", "15040"), ("15040", "15100", "15010", "15090")];
+    let prices = [
+        ("15000", "15050", "14900", "15040"),
+        ("15040", "15100", "15010", "15090"),
+    ];
     prices
         .iter()
         .enumerate()

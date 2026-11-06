@@ -13,7 +13,12 @@ pub fn notional(price: Price, quantity: Quantity) -> Money {
 /// Positive when the exit price is better than the entry price for the given
 /// side. For a long (buy) position, P&L = `(exit − entry) × qty`; for a
 /// short, P&L = `(entry − exit) × qty`.
-pub fn pnl(side: vyapaar_core::order::OrderSide, entry: Price, exit: Price, quantity: Quantity) -> Money {
+pub fn pnl(
+    side: vyapaar_core::order::OrderSide,
+    entry: Price,
+    exit: Price,
+    quantity: Quantity,
+) -> Money {
     let qty = quantity.value();
     let pnl = match side {
         vyapaar_core::order::OrderSide::Buy => (exit.value() - entry.value()) * qty,
