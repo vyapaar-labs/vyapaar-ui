@@ -126,3 +126,64 @@ impl AccountSummary {
         }
     }
 }
+
+/// The full watchlist/dashboard view: rows, market status, and account card.
+///
+/// A thin presentational model over `vyapaar-market` live feed data (per
+/// `docs/plans/0005-fincept-terminal-screen-inventory.md` §2 item 1): it holds
+/// whatever the feed has most recently delivered and renders it; it computes
+/// nothing itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WatchlistViewModel {
+    /// Watchlist rows, in display order.
+    pub rows: Vec<WatchlistRow>,
+    /// Market session status, if the feed has reported one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<MarketStatus>,
+    /// Account summary card, if one is available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<AccountSummary>,
+}
+
+impl WatchlistViewModel {
+    /// An empty watchlist view model.
+    pub fn empty() -> Self {
+        Self {
+            rows: Vec::new(),
+            status: None,
+            account: None,
+        }
+    }
+
+    /// Insert or replace a row (matched by instrument), keeping stable order.
+    ///
+    /// Returns `true` when an existing row was replaced, `false` when a new
+    /// row was appended.
+    pub fn upsert(&mut self, row: WatchlistRow) -> bool {
+        if let Some(existing) = self
+            .rows
+            .iter_mut()
+            .find(|r| r.instrument == row.instrument)
+        {
+            *existing = row;
+            true
+        } else {
+            self.rows.push(row);
+            false
+        }
+    }
+
+    /// Remove the row for `instrument`.
+    ///
+    /// Returns `false` when no such row existed.
+    pub fn remove(&mut self, instrument: &InstrumentId) -> bool {
+        let before = self.rows.len();
+        self.rows.retain(|r| &r.instrument != instrument);
+        self.rows.len() != before
+    }
+
+    /// The number of rows currently shown.
+    pub fn row_count(&self) -> usize {
+        self.rows.len()
+    }
+}

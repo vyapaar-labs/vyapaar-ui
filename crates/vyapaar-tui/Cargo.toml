@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Ratatui terminal workstation for the Vyapaar platform (multi-tab: Screener, Portfolio, Orders, AgentChat)"
+description = "Ratatui terminal workstation for the Vyapaar platform (multi-tab: Watchlist, Screener, Portfolio, Orders, Backtest, Algos, AgentChat)"
 
 [lib]
 name = "vyapaar_tui"

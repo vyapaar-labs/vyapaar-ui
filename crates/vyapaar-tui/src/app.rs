@@ -1,4 +1,4 @@
-//! The four-tab workstation model.
+//! The seven-tab workstation model.
 
 use serde::{Deserialize, Serialize};
 
@@ -6,35 +6,47 @@ use crate::agent_chat::ChatTranscript;
 use crate::keybindings::{Action, handle_key};
 use ratatui::crossterm::event::KeyEvent;
 
-/// The four workstation tabs.
+/// The workstation tabs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ActiveTab {
+    /// Watchlist / dashboard.
+    Watchlist,
     /// Neural AST screener.
     Screener,
     /// Portfolio snapshot.
     Portfolio,
     /// Live orders.
     Orders,
+    /// Backtest results viewer.
+    Backtest,
+    /// Algo / strategy management.
+    Algos,
     /// Agent chat.
     AgentChat,
 }
 
 impl ActiveTab {
     /// All tabs in tab-order.
-    pub const ALL: [ActiveTab; 4] = [
+    pub const ALL: [ActiveTab; 7] = [
+        ActiveTab::Watchlist,
         ActiveTab::Screener,
         ActiveTab::Portfolio,
         ActiveTab::Orders,
+        ActiveTab::Backtest,
+        ActiveTab::Algos,
         ActiveTab::AgentChat,
     ];
 
     /// The display title of the tab.
     pub fn title(&self) -> &'static str {
         match self {
+            Self::Watchlist => "Watchlist",
             Self::Screener => "Screener",
             Self::Portfolio => "Portfolio",
             Self::Orders => "Orders",
+            Self::Backtest => "Backtest",
+            Self::Algos => "Algos",
             Self::AgentChat => "Agent",
         }
     }
@@ -42,20 +54,26 @@ impl ActiveTab {
     /// The next tab in tab-order (wrapping).
     pub fn next(self) -> Self {
         match self {
+            Self::Watchlist => Self::Screener,
             Self::Screener => Self::Portfolio,
             Self::Portfolio => Self::Orders,
-            Self::Orders => Self::AgentChat,
-            Self::AgentChat => Self::Screener,
+            Self::Orders => Self::Backtest,
+            Self::Backtest => Self::Algos,
+            Self::Algos => Self::AgentChat,
+            Self::AgentChat => Self::Watchlist,
         }
     }
 
     /// The previous tab in tab-order (wrapping).
     pub fn previous(self) -> Self {
         match self {
-            Self::Screener => Self::AgentChat,
+            Self::Watchlist => Self::AgentChat,
+            Self::Screener => Self::Watchlist,
             Self::Portfolio => Self::Screener,
             Self::Orders => Self::Portfolio,
-            Self::AgentChat => Self::Orders,
+            Self::Backtest => Self::Orders,
+            Self::Algos => Self::Backtest,
+            Self::AgentChat => Self::Algos,
         }
     }
 }
@@ -74,10 +92,10 @@ pub struct TuiApp {
 }
 
 impl TuiApp {
-    /// Create a new TUI app starting on the screener tab.
+    /// Create a new TUI app starting on the watchlist dashboard.
     pub fn new() -> Self {
         Self {
-            active_tab: ActiveTab::Screener,
+            active_tab: ActiveTab::Watchlist,
             should_quit: false,
             chat: ChatTranscript::new(),
             selected_index: 0,

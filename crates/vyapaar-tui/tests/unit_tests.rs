@@ -18,29 +18,35 @@ fn key(code: KeyCode) -> KeyEvent {
 }
 
 #[test]
-fn new_app_starts_on_screener() {
+fn new_app_starts_on_watchlist() {
     let app = TuiApp::new();
-    assert_eq!(app.active_tab, ActiveTab::Screener);
+    assert_eq!(app.active_tab, ActiveTab::Watchlist);
     assert!(!app.should_quit);
     assert_eq!(app.selected_index, 0);
 }
 
 #[test]
 fn tab_order_wraps() {
+    assert_eq!(ActiveTab::Watchlist.next(), ActiveTab::Screener);
     assert_eq!(ActiveTab::Screener.next(), ActiveTab::Portfolio);
     assert_eq!(ActiveTab::Portfolio.next(), ActiveTab::Orders);
-    assert_eq!(ActiveTab::Orders.next(), ActiveTab::AgentChat);
-    assert_eq!(ActiveTab::AgentChat.next(), ActiveTab::Screener);
-    assert_eq!(ActiveTab::Screener.previous(), ActiveTab::AgentChat);
+    assert_eq!(ActiveTab::Orders.next(), ActiveTab::Backtest);
+    assert_eq!(ActiveTab::Backtest.next(), ActiveTab::Algos);
+    assert_eq!(ActiveTab::Algos.next(), ActiveTab::AgentChat);
+    assert_eq!(ActiveTab::AgentChat.next(), ActiveTab::Watchlist);
+    assert_eq!(ActiveTab::Watchlist.previous(), ActiveTab::AgentChat);
 }
 
 #[test]
 fn tab_titles() {
+    assert_eq!(ActiveTab::Watchlist.title(), "Watchlist");
     assert_eq!(ActiveTab::Screener.title(), "Screener");
     assert_eq!(ActiveTab::Portfolio.title(), "Portfolio");
     assert_eq!(ActiveTab::Orders.title(), "Orders");
+    assert_eq!(ActiveTab::Backtest.title(), "Backtest");
+    assert_eq!(ActiveTab::Algos.title(), "Algos");
     assert_eq!(ActiveTab::AgentChat.title(), "Agent");
-    assert_eq!(ActiveTab::ALL.len(), 4);
+    assert_eq!(ActiveTab::ALL.len(), 7);
 }
 
 #[test]
@@ -61,7 +67,7 @@ fn keybindings_map_chars_and_navigation() {
 fn app_apply_quit_and_tabs() {
     let mut app = TuiApp::new();
     app.on_key(key(KeyCode::Char('l')));
-    assert_eq!(app.active_tab, ActiveTab::Portfolio);
+    assert_eq!(app.active_tab, ActiveTab::Screener);
     app.on_key(key(KeyCode::Char('q')));
     assert!(app.should_quit);
 }

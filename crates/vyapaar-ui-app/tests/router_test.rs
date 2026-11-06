@@ -48,7 +48,11 @@ fn route_labels_and_paths() {
     assert_eq!(AppRoute::Screener.label(), "Screener");
     assert_eq!(AppRoute::Screener.path(), "/screener");
     assert_eq!(AppRoute::Home.path(), "/");
-    assert_eq!(AppRoute::ALL.len(), 5);
+    assert_eq!(AppRoute::Backtest.label(), "Backtest");
+    assert_eq!(AppRoute::Backtest.path(), "/backtest");
+    assert_eq!(AppRoute::Portfolio.path(), "/portfolio");
+    assert_eq!(AppRoute::Algos.path(), "/algos");
+    assert_eq!(AppRoute::ALL.len(), 8);
 }
 
 #[test]

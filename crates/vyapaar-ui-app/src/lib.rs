@@ -13,14 +13,22 @@
 //!   `vyapaar-ui-core`. Rendering (Leptos, canvas) is left to the host.
 //! - **Tests in `tests/`** (parallel test directory rule).
 
+pub mod algos;
+pub mod backtest;
+pub mod portfolio;
 pub mod router;
 pub mod screener;
 pub mod simulator;
 pub mod studio;
 pub mod system;
+pub mod watchlist;
 
+pub use algos::AlgosFeature;
+pub use backtest::BacktestFeature;
+pub use portfolio::PortfolioFeature;
 pub use router::{AppRoute, Router, RouterError};
 pub use screener::{ScreenerFeature, ScreenerFeatureError};
 pub use simulator::{SimulatorFeature, SimulatorPhase};
 pub use studio::{Connection, NodeId, StudioCanvas, StudioNode, StudioNodeKind};
 pub use system::{SubsystemState, SystemFeature};
+pub use watchlist::WatchlistFeature;

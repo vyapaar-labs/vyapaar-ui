@@ -1,13 +1,16 @@
 //! # व्यापार・face vyapaar-tui
 //!
 //! Ratatui terminal workstation for the Vyapaar platform — a multi-tab
-//! trading terminal (migration-guide.md §1: *`TuiApp`, `ActiveTab{Screener,
-//! Portfolio, Orders, AgentChat}`, keybindings, layout*).
+//! trading terminal (migration-guide.md §1: *`TuiApp`, `ActiveTab{Watchlist,
+//! Screener, Portfolio, Orders, Backtest, Algos, AgentChat}`, keybindings,
+//! layout*).
 //!
 //! Design (see `docs/plans/0001-agent-chat-terminal-from-artha.md`):
-//! - **Multi-tab, not chat-only**: `AgentChat` is one of four tabs; the
-//!   other three (`Screener`, `Portfolio`, `Orders`) are driven by
-//!   `vyapaar-market` / `vyapaar-ledger` data.
+//! - **Multi-tab, not chat-only**: `AgentChat` is one of seven tabs; the
+//!   others (`Watchlist`, `Screener`, `Portfolio`, `Orders`, `Backtest`,
+//!   `Algos`) are driven by `vyapaar-market` / `vyapaar-ledger` /
+//!   `vyapaar-runtime-backtest` data (screen inventory per
+//!   `docs/plans/0005-fincept-terminal-screen-inventory.md`).
 //! - **Sync-render / async-core bridge**: the render loop is synchronous
 //!   (Ratatui + crossterm); backend events arrive through the
 //!   `vyapaar-ui-client` event stream and are drained each frame.

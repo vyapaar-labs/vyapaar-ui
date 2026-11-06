@@ -13,15 +13,23 @@
 //! - **Tests in `tests/`**: `ui_core_primitives_test.rs`,
 //!   `screener_primitives_test.rs`, `home_primitives_test.rs`.
 
+pub mod algos;
 pub mod atoms;
+pub mod backtest;
 pub mod home;
+pub mod portfolio;
 pub mod screener;
 
+pub use algos::{AlgoManagerViewModel, AlgoRow, AlgoStatus};
 pub use atoms::{
     Accent, Badge, BadgeTone, Delta, EquityPoint, MetricValue, Spacing, StatusPill, Tag, TextAlign,
     TrendDirection, TrendPill,
 };
-pub use home::{AccountSummary, MarketStatus, MarketStatusKind, WatchlistRow};
+pub use backtest::{BacktestResultView, BacktestStatus, BacktestSummary};
+pub use home::{AccountSummary, MarketStatus, MarketStatusKind, WatchlistRow, WatchlistViewModel};
+pub use portfolio::{
+    PortfolioHoldingRow, PortfolioPositionRow, PortfolioTotals, PortfolioViewModel,
+};
 pub use screener::{
     ScreenerColumn, ScreenerFilterChip, ScreenerRowModel, ScreenerSort, ScreenerSortOrder,
     ScreenerViewModel,

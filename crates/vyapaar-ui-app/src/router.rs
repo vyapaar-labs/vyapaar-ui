@@ -16,6 +16,12 @@ pub enum AppRoute {
     Simulator,
     /// System health panel.
     System,
+    /// Backtest results viewer.
+    Backtest,
+    /// Portfolio / positions view.
+    Portfolio,
+    /// Algo / strategy management.
+    Algos,
 }
 
 impl AppRoute {
@@ -27,6 +33,9 @@ impl AppRoute {
             Self::Studio => "Studio",
             Self::Simulator => "Simulator",
             Self::System => "System",
+            Self::Backtest => "Backtest",
+            Self::Portfolio => "Portfolio",
+            Self::Algos => "Algos",
         }
     }
 
@@ -38,16 +47,22 @@ impl AppRoute {
             Self::Studio => "/studio",
             Self::Simulator => "/simulator",
             Self::System => "/system",
+            Self::Backtest => "/backtest",
+            Self::Portfolio => "/portfolio",
+            Self::Algos => "/algos",
         }
     }
 
     /// All routes in display order.
-    pub const ALL: [AppRoute; 5] = [
+    pub const ALL: [AppRoute; 8] = [
         AppRoute::Home,
         AppRoute::Screener,
         AppRoute::Studio,
         AppRoute::Simulator,
         AppRoute::System,
+        AppRoute::Backtest,
+        AppRoute::Portfolio,
+        AppRoute::Algos,
     ];
 }
 
