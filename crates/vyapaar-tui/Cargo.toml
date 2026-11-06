@@ -3,15 +3,22 @@ name = "vyapaar-tui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Ratatui terminal workstation for the Vyapaar platform (multi-tab: Screener, Portfolio, Orders, AgentChat)"
+
+[lib]
+name = "vyapaar_tui"
 
 [dependencies]
-vyapaar-core = { workspace = true }
-vyapaar-agent-core = { workspace = true }
-vyapaar-agent-chat = { workspace = true }
-vyapaar-agent-llm = { workspace = true }
-vyapaar-highlight = { workspace = true }
-tokio = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-chrono = { workspace = true }
-thiserror = { workspace = true }
+vyapaar-core.workspace = true
+vyapaar-ui-core.workspace = true
+vyapaar-highlight.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+rust_decimal.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
