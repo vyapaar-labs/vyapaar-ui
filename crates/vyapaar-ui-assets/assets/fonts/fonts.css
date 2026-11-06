@@ -1,0 +1,243 @@
+/* ==========================================================================
+ * Vyapaar UI - Typography & Self-Hosted Web Fonts (WOFF / WOFF2)
+ * Clean, structured font assets for Vyapaar Terminal & Studio.
+ * Families: Roboto Mono, IBM Plex Sans, IBM Plex Mono, Silkscreen,
+ *           Inter, Source Sans 3, Noto Sans.
+ * ========================================================================== */
+
+/* -------------------------------------------------------------------------- */
+/* Roboto Mono */
+/* -------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./roboto-mono/roboto-mono-latin-400-normal.woff2') format('woff2'),
+       url('./roboto-mono/roboto-mono-latin-400-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./roboto-mono/roboto-mono-latin-500-normal.woff2') format('woff2'),
+       url('./roboto-mono/roboto-mono-latin-500-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./roboto-mono/roboto-mono-latin-600-normal.woff2') format('woff2'),
+       url('./roboto-mono/roboto-mono-latin-600-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./roboto-mono/roboto-mono-latin-700-normal.woff2') format('woff2'),
+       url('./roboto-mono/roboto-mono-latin-700-normal.woff') format('woff');
+}
+
+/* -------------------------------------------------------------------------- */
+/* IBM Plex Sans */
+/* -------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./ibm-plex-sans/ibm-plex-sans-latin-400-normal.woff2') format('woff2'),
+       url('./ibm-plex-sans/ibm-plex-sans-latin-400-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./ibm-plex-sans/ibm-plex-sans-latin-500-normal.woff2') format('woff2'),
+       url('./ibm-plex-sans/ibm-plex-sans-latin-500-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./ibm-plex-sans/ibm-plex-sans-latin-600-normal.woff2') format('woff2'),
+       url('./ibm-plex-sans/ibm-plex-sans-latin-600-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./ibm-plex-sans/ibm-plex-sans-latin-700-normal.woff2') format('woff2'),
+       url('./ibm-plex-sans/ibm-plex-sans-latin-700-normal.woff') format('woff');
+}
+
+/* -------------------------------------------------------------------------- */
+/* IBM Plex Mono */
+/* -------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./ibm-plex-mono/ibm-plex-mono-latin-400-normal.woff2') format('woff2'),
+       url('./ibm-plex-mono/ibm-plex-mono-latin-400-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./ibm-plex-mono/ibm-plex-mono-latin-500-normal.woff2') format('woff2'),
+       url('./ibm-plex-mono/ibm-plex-mono-latin-500-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./ibm-plex-mono/ibm-plex-mono-latin-600-normal.woff2') format('woff2'),
+       url('./ibm-plex-mono/ibm-plex-mono-latin-600-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./ibm-plex-mono/ibm-plex-mono-latin-700-normal.woff2') format('woff2'),
+       url('./ibm-plex-mono/ibm-plex-mono-latin-700-normal.woff') format('woff');
+}
+
+/* -------------------------------------------------------------------------- */
+/* Silkscreen */
+/* -------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Silkscreen';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./silkscreen/silkscreen-latin-400-normal.woff2') format('woff2'),
+       url('./silkscreen/silkscreen-latin-400-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Silkscreen';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./silkscreen/silkscreen-latin-700-normal.woff2') format('woff2'),
+       url('./silkscreen/silkscreen-latin-700-normal.woff') format('woff');
+}
+
+/* -------------------------------------------------------------------------- */
+/* Inter */
+/* -------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./inter/inter-latin-400-normal.woff2') format('woff2'),
+       url('./inter/inter-latin-400-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./inter/inter-latin-500-normal.woff2') format('woff2'),
+       url('./inter/inter-latin-500-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./inter/inter-latin-600-normal.woff2') format('woff2'),
+       url('./inter/inter-latin-600-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./inter/inter-latin-700-normal.woff2') format('woff2'),
+       url('./inter/inter-latin-700-normal.woff') format('woff');
+}
+
+/* -------------------------------------------------------------------------- */
+/* Source Sans 3 */
+/* -------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Source Sans 3';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./source-sans-3/source-sans-3-latin-400-normal.woff2') format('woff2'),
+       url('./source-sans-3/source-sans-3-latin-400-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Source Sans 3';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./source-sans-3/source-sans-3-latin-500-normal.woff2') format('woff2'),
+       url('./source-sans-3/source-sans-3-latin-500-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Source Sans 3';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./source-sans-3/source-sans-3-latin-600-normal.woff2') format('woff2'),
+       url('./source-sans-3/source-sans-3-latin-600-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Source Sans 3';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./source-sans-3/source-sans-3-latin-700-normal.woff2') format('woff2'),
+       url('./source-sans-3/source-sans-3-latin-700-normal.woff') format('woff');
+}
+
+/* -------------------------------------------------------------------------- */
+/* Noto Sans */
+/* -------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Noto Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./noto-sans/noto-sans-latin-400-normal.woff2') format('woff2'),
+       url('./noto-sans/noto-sans-latin-400-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Noto Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./noto-sans/noto-sans-latin-500-normal.woff2') format('woff2'),
+       url('./noto-sans/noto-sans-latin-500-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Noto Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./noto-sans/noto-sans-latin-600-normal.woff2') format('woff2'),
+       url('./noto-sans/noto-sans-latin-600-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Noto Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./noto-sans/noto-sans-latin-700-normal.woff2') format('woff2'),
+       url('./noto-sans/noto-sans-latin-700-normal.woff') format('woff');
+}
+
