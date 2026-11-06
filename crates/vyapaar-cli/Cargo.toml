@@ -9,6 +9,7 @@ vyapaar-core = { workspace = true }
 vyapaar-agent-core = { workspace = true }
 vyapaar-agent-chat = { workspace = true }
 vyapaar-agent-llm = { workspace = true }
+vyapaar-agent-prompt = { workspace = true }
 vyapaar-tui = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }

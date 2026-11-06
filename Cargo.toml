@@ -24,6 +24,7 @@ vyapaar-core = { path = "../vyapaar-core" }
 vyapaar-agent-core = { path = "../vyapaar-agent/crates/vyapaar-agent-core" }
 vyapaar-agent-chat = { path = "../vyapaar-agent/crates/vyapaar-agent-chat" }
 vyapaar-agent-llm = { path = "../vyapaar-agent/crates/vyapaar-agent-llm" }
+vyapaar-agent-prompt = { path = "../vyapaar-agent/crates/vyapaar-agent-prompt" }
 vyapaar-highlight = { path = "crates/vyapaar-highlight" }
 vyapaar-tui = { path = "crates/vyapaar-tui" }
 tokio = { version = "1", features = ["full"] }
