@@ -3,6 +3,7 @@
 > **Tier**: Tier 5A (Depends on `vyapaar-core`)
 > **Source**: `/home/pmallapp/Devel/Finance/honba-workspace/honba-kao`
 > **Target**: `/home/pmallapp/Devel/Finance/vyapaar-labs/vyapaar-ui`
+> **Status**: ✅ **TIER 5 COMPLETE** — verification gate green (2026-11-05)
 
 ---
 
@@ -37,3 +38,40 @@ cargo clippy --all-targets -- -D warnings
 cargo test --workspace
 cargo check -p vyapaar-ui-app --target wasm32-unknown-unknown
 ```
+
+## 4. Migration Notes (2026-11-05)
+
+The honba-kao source tree was **not available** in the migration environment
+(`/home/pmallapp/Devel/Finance/honba-workspace` absent), so all nine crates
+were implemented **fresh against the contracts in this guide and
+`docs/plans/0001-agent-chat-terminal-from-artha.md`** rather than ported
+line-for-line. The workspace shape, crate boundaries, test-suite names, and
+WASM/native isolation follow the mapping table above exactly.
+
+### Crates delivered
+| Crate | Contents | Tests |
+| :--- | :--- | :--- |
+| `vyapaar-ui-core` | Atoms/molecules (`Badge`, `StatusPill`, `TrendPill`, `Delta`, `MetricValue`, `EquityPoint`), screener primitives (`ScreenerColumn`, `ScreenerSort`, `ScreenerFilterChip`, `ScreenerRowModel`, `ScreenerViewModel`), home primitives (`MarketStatus`, `WatchlistRow`, `AccountSummary`) | `ui_core_primitives_test.rs`, `screener_primitives_test.rs`, `home_primitives_test.rs` (17) |
+| `vyapaar-ui-assets` | `branding`, `themes` (dark/light/amber palettes), `fonts` stacks, `fixtures` (deterministic bars/ticks/portfolio/screener), `audio` profiles, `assets/style/components.css` | `unit_tests.rs`, `fixtures_test.rs` (13) |
+| `vyapaar-ui-charts` | `Candle`, `CandlestickChart` (Decimal y/x mapping), `ChartPoint`, `ChartSeries`, `LineChart`, `ChartRange`, `AxisTicks`, `ChartPalette` | 7 suites: candle, series, axis, palette, edge-cases, roundtrip, geometry (33) |
+| `vyapaar-ui-client` | `ClientEvent` (Tick/Bar/Order/Fill/Portfolio/Screener/System), `EventKind`, WASM-safe push `EventStream` with `Subscription` (drop-unsubscribe, per-subscriber drain cursor, bounded log) | `stream_test.rs` (7) |
+| `vyapaar-ui-api-wasm` | `bindings` (`Bindings` facade + `ApiError`), `analytics` (Sharpe/Sortino/drawdown), `indicators` (SMA/EMA/RSI), `margin`, `pairing`, `payoff` (call/put), `pricing` (notional/PnL/mtm/break-even), `replay` (`PositionView`), `screener` (`apply_scan`) | 8 suites per guide (37) |
+| `vyapaar-ui-app` | `router` (`AppRoute`, `Router`), `screener` (`ScreenerFeature`), `studio` (`StudioCanvas` node graph with cycle detection), `simulator` (`SimulatorFeature`), `system` (`SystemFeature`) | 5 suites (29) |
+| `vyapaar-highlight` **[NEW]** | Zero-I/O hand-rolled lexer (`Language{Rust,Python,Json,Markdown,Shell,Plain}`, `HighlightClass`, `HighlightSpan`, `highlight_code`) — **no tree-sitter**, WASM-safe, zero deps | `unit_tests.rs` (13) |
+| `vyapaar-tui` **[NEW]** | `TuiApp`, `ActiveTab{Screener,Portfolio,Orders,AgentChat}`, crossterm keybindings, `LayoutModel`, `ChatTranscript` w/ markdown highlight seam | `unit_tests.rs` (10) |
+| `vyapaar-cli` **[NEW]** | `CliArgs` + `Command{Tui,Ask,Scan,Health}` (clap), thin runner, `vyapaar` binary (`vyapaar health` verified) | `unit_tests.rs` (9) |
+
+### Key decisions
+- **WASM isolation**: `tokio`/`ratatui`/`crossterm`/`clap` are only depended on
+  by `vyapaar-{cli,tui}`. WASM crates carry zero async/native deps.
+- **wasm32-unknown-unknown**: `vyapaar-core`'s transitive `uuid` v4 needs an RNG
+  source on wasm. Enabled via workspace `uuid` `rng-getrandom` + `getrandom`
+  `wasm_js` features (activated from `vyapaar-ui-app`). `cargo check -p
+  vyapaar-ui-app --target wasm32-unknown-unknown` is green.
+- **`ScreenerFilterChip` lives in `vyapaar-ui-core`** (presentational), not
+  `vyapaar-core`; the canonical filter is `ScreenerFilterPredicate`.
+- **`Ask`/`Scan` CLI commands return `NotWired`** until `vyapaar-agent` /
+  `vyapaar-market` screener APIs land — deliberately not faked.
+- **Remaining follow-up** (out of tier-5 gate scope): real Leptos view layer
+  for `vyapaar-ui-app` (state models are in place), wiring `vyapaar-cli
+  ask/scan` to backends, and TUI `run()` event loop.

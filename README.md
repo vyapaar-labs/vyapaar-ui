@@ -15,7 +15,7 @@ Trader and quantitative workstation interfaces across terminal and browser.
 - `vyapaar-ui-api-wasm` — WASM bridge bindings for web integration
 - `vyapaar-tui` — Ratatui-based terminal dashboard
 - `vyapaar-cli` — Command line interface (`vyapaar` CLI)
-- `vyapaar-highlight` — Tree-sitter strategy & code highlighter
+- `vyapaar-highlight` — Zero-I/O WASM-safe syntax highlighter (hand-rolled lexer, no tree-sitter)
 
 ## Build & Test
 

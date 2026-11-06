@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use vyapaar_ui_assets::audio::{SoundId, profile};
-use vyapaar_ui_assets::branding::{Branding, BRAND_NAME, TAGLINE};
+use vyapaar_ui_assets::branding::{BRAND_NAME, Branding, TAGLINE};
 use vyapaar_ui_assets::fonts::{FONTS_CSS, FontFamily, FontWeight, mono_stack, sans_stack};
 use vyapaar_ui_assets::themes::{Color, ThemeId, all_themes, theme};
 
