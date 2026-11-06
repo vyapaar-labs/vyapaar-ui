@@ -3,8 +3,16 @@ name = "vyapaar-ui-api-wasm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "WASM-safe analytics/indicators/margin/pairing/payoff/pricing/replay/screener bindings for the Vyapaar workstation"
+
+[lib]
+name = "vyapaar_ui_api_wasm"
 
 [dependencies]
-vyapaar-core = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
+vyapaar-core.workspace = true
+vyapaar-ui-core.workspace = true
+rust_decimal = { workspace = true, features = ["maths"] }
+serde.workspace = true
+thiserror.workspace = true
