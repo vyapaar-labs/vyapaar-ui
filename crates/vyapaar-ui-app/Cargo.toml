@@ -3,8 +3,29 @@ name = "vyapaar-ui-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "WASM-safe Vyapaar workstation app: router, screener, strategy studio, simulator, and system features"
+
+[lib]
+name = "vyapaar_ui_app"
 
 [dependencies]
-vyapaar-core = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
+vyapaar-core.workspace = true
+vyapaar-ui-core.workspace = true
+vyapaar-ui-assets.workspace = true
+vyapaar-ui-charts.workspace = true
+vyapaar-ui-client.workspace = true
+vyapaar-ui-api-wasm.workspace = true
+vyapaar-highlight.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+rust_decimal.workspace = true
+# Enables the `rng-getrandom` feature on the shared `uuid` crate so that
+# `vyapaar-core`'s uuid dependency (v4) compiles on wasm32-unknown-unknown.
+uuid = { workspace = true, features = ["rng-getrandom"] }
+# Enables getrandom's `wasm_js` backend for wasm32-unknown-unknown.
+getrandom = { workspace = true }
+
+[dev-dependencies]
+serde_json.workspace = true
