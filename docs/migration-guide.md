@@ -51,14 +51,14 @@ WASM/native isolation follow the mapping table above exactly.
 ### Crates delivered
 | Crate | Contents | Tests |
 | :--- | :--- | :--- |
-| `vyapaar-ui-core` | Atoms/molecules (`Badge`, `StatusPill`, `TrendPill`, `Delta`, `MetricValue`, `EquityPoint`), screener primitives (`ScreenerColumn`, `ScreenerSort`, `ScreenerFilterChip`, `ScreenerRowModel`, `ScreenerViewModel`), home primitives (`MarketStatus`, `WatchlistRow`, `AccountSummary`) | `ui_core_primitives_test.rs`, `screener_primitives_test.rs`, `home_primitives_test.rs` (17) |
+| `vyapaar-ui-core` | Atoms/molecules (`Badge`, `StatusPill`, `TrendPill`, `Delta`, `MetricValue`, `EquityPoint`), screener primitives (`ScreenerColumn`, `ScreenerSort`, `ScreenerFilterChip`, `ScreenerRowModel`, `ScreenerViewModel`), home primitives (`MarketStatus`, `WatchlistRow`, `AccountSummary`, `WatchlistViewModel`), backtest results primitives (`BacktestSummary`, `BacktestResultView`), portfolio view primitives (`PortfolioViewModel`, `PortfolioPositionRow`, `PortfolioHoldingRow`, `PortfolioTotals`), algo management primitives (`AlgoRow`, `AlgoManagerViewModel`, `AlgoStatus`) | `ui_core_primitives_test.rs`, `screener_primitives_test.rs`, `home_primitives_test.rs`, `watchlist_primitives_test.rs`, `backtest_primitives_test.rs`, `portfolio_primitives_test.rs`, `algos_primitives_test.rs` (31) |
 | `vyapaar-ui-assets` | `branding`, `themes` (dark/light/amber palettes), `fonts` stacks, `fixtures` (deterministic bars/ticks/portfolio/screener), `audio` profiles, `assets/style/components.css` | `unit_tests.rs`, `fixtures_test.rs` (13) |
 | `vyapaar-ui-charts` | `Candle`, `CandlestickChart` (Decimal y/x mapping), `ChartPoint`, `ChartSeries`, `LineChart`, `ChartRange`, `AxisTicks`, `ChartPalette` | 7 suites: candle, series, axis, palette, edge-cases, roundtrip, geometry (33) |
 | `vyapaar-ui-client` | `ClientEvent` (Tick/Bar/Order/Fill/Portfolio/Screener/System), `EventKind`, WASM-safe push `EventStream` with `Subscription` (drop-unsubscribe, per-subscriber drain cursor, bounded log) | `stream_test.rs` (7) |
 | `vyapaar-ui-api-wasm` | `bindings` (`Bindings` facade + `ApiError`), `analytics` (Sharpe/Sortino/drawdown), `indicators` (SMA/EMA/RSI), `margin`, `pairing`, `payoff` (call/put), `pricing` (notional/PnL/mtm/break-even), `replay` (`PositionView`), `screener` (`apply_scan`) | 8 suites per guide (37) |
-| `vyapaar-ui-app` | `router` (`AppRoute`, `Router`), `screener` (`ScreenerFeature`), `studio` (`StudioCanvas` node graph with cycle detection), `simulator` (`SimulatorFeature`), `system` (`SystemFeature`) | 5 suites (29) |
+| `vyapaar-ui-app` | `router` (`AppRoute` incl. Backtest/Portfolio/Algos, `Router`), `screener` (`ScreenerFeature`), `studio` (`StudioCanvas` node graph with cycle detection), `simulator` (`SimulatorFeature`), `system` (`SystemFeature`), `watchlist` (`WatchlistFeature`), `backtest` (`BacktestFeature`), `portfolio` (`PortfolioFeature`), `algos` (`AlgosFeature`) | 9 suites (36) |
 | `vyapaar-highlight` **[NEW]** | Zero-I/O hand-rolled lexer (`Language{Rust,Python,Json,Markdown,Shell,Plain}`, `HighlightClass`, `HighlightSpan`, `highlight_code`) — **no tree-sitter**, WASM-safe, zero deps | `unit_tests.rs` (13) |
-| `vyapaar-tui` **[NEW]** | `TuiApp`, `ActiveTab{Screener,Portfolio,Orders,AgentChat}`, crossterm keybindings, `LayoutModel`, `ChatTranscript` w/ markdown highlight seam | `unit_tests.rs` (10) |
+| `vyapaar-tui` **[NEW]** | `TuiApp`, `ActiveTab{Watchlist,Screener,Portfolio,Orders,Backtest,Algos,AgentChat}`, crossterm keybindings, `LayoutModel`, `ChatTranscript` w/ markdown highlight seam | `unit_tests.rs` (10) |
 | `vyapaar-cli` **[NEW]** | `CliArgs` + `Command{Tui,Ask,Scan,Health}` (clap), thin runner, `vyapaar` binary (`vyapaar health` verified) | `unit_tests.rs` (9) |
 
 ### Key decisions
@@ -71,7 +71,13 @@ WASM/native isolation follow the mapping table above exactly.
 - **`ScreenerFilterChip` lives in `vyapaar-ui-core`** (presentational), not
   `vyapaar-core`; the canonical filter is `ScreenerFilterPredicate`.
 - **`Ask`/`Scan` CLI commands return `NotWired`** until `vyapaar-agent` /
-  `vyapaar-market` screener APIs land — deliberately not faked.
+  `vyapaar-market` screener APIs land — deliberately not faked
+  (`docs/gaps/0001-cli-ask-scan-not-wired.md`).
+- **Screener canonicality (Layer 5)**: the UI builds only against
+  `vyapaar_core::screener` wire contracts (evaluated by `apply_scan`); the
+  `vyapaar-market-indicators::screener` module is a standalone simplified
+  duplicate not used by `vyapaar-ui` or `vyapaar-agent` (resolved in
+  `docs/plans/0005` §2 item 2).
 - **Remaining follow-up** (out of tier-5 gate scope): real Leptos view layer
   for `vyapaar-ui-app` (state models are in place), wiring `vyapaar-cli
-  ask/scan` to backends, and TUI `run()` event loop.
+  ask/scan` to backends (gap `0001`), and TUI `run()` event loop.

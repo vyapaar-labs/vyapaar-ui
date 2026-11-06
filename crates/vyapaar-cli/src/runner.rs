@@ -59,8 +59,9 @@ fn run_ask(prompt: &str) -> Result<CommandOutcome, CliError> {
     if prompt.trim().is_empty() {
         return Err(CliError::NotWired("vyapaar ask (empty prompt)".to_string()));
     }
-    // TODO(tier-5 follow-up): wire to vyapaar-agent once its UI-facing API
-    // lands. Until then fail loudly rather than fake success.
+    // Gap: docs/gaps/0001-cli-ask-scan-not-wired.md — ask needs a real
+    // vyapaar-agent turn runner injected over the agent boundary. Until then
+    // fail loudly rather than fake success.
     Err(CliError::NotWired("vyapaar ask".to_string()))
 }
 
@@ -69,7 +70,9 @@ fn run_scan(query: &str) -> Result<CommandOutcome, CliError> {
     if query.trim().is_empty() {
         return Err(CliError::NotWired("vyapaar scan (empty query)".to_string()));
     }
-    // TODO(tier-5 follow-up): wire to vyapaar-market screener once available.
+    // Gap: docs/gaps/0001-cli-ask-scan-not-wired.md — scan needs a row
+    // universe (fixture or vyapaar-runtime-api-rest /screener/scan) plus
+    // apply_scan evaluation wired into this CLI. Until then fail loudly.
     Err(CliError::NotWired("vyapaar scan".to_string()))
 }
 

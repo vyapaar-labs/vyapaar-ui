@@ -1,6 +1,28 @@
 # 0005 — FinceptTerminal's Screen Inventory vs. vyapaar-ui's Roadmap
 
-> **Status**: Proposed — not yet implemented.
+> **Status**: Implemented — Layers 4/5 of the bottoms-up build order. Screen
+> inventory Phases 1–3 landed in `vyapaar-ui`:
+> - **Watchlist / Dashboard**: `WatchlistFeature` in `vyapaar-ui-app` folds
+>   canonical `Tick`/`Bar` events into `WatchlistViewModel` rows
+>   (price/delta/sparkline) + `MarketStatus` + `AccountSummary`; TUI now opens
+>   on this tab.
+> - **Screener**: kept on the canonical `vyapaar_core::screener` wire contract
+>   (`ScreenerFeature` + `vyapaar-ui-api-wasm::apply_scan`); the
+>   two-screener-backend question is resolved below in §2 item 2.
+> - **Backtest results viewer**: `BacktestSummary`/`BacktestResultView`
+>   primitives in `vyapaar-ui-core` + `BacktestFeature` in `vyapaar-ui-app`
+>   (run lifecycle, equity curve, peak/trough), a view over
+>   `vyapaar-runtime-backtest`'s `BacktestResult`.
+> - **Portfolio / positions**: `PortfolioViewModel` (positions + holdings +
+>   totals) in `vyapaar-ui-core`, projected from the canonical
+>   `vyapaar_core::portfolio::PortfolioSnapshot` wire contract; `PortfolioFeature`
+>   in `vyapaar-ui-app` ingests `ClientEvent::Portfolio`.
+> - **Algo / strategy management**: `AlgoRow`/`AlgoManagerViewModel` +
+>   `AlgosFeature` for versioned strategy manifests and
+>   `vyapaar-agent-genetic` synthesizers.
+> - Router gained `Backtest`/`Portfolio`/`Algos` routes; `vyapaar-tui` is now
+>   the seven-tab workstation (Watchlist, Screener, Portfolio, Orders,
+>   Backtest, Algos, AgentChat).
 > **Target Crates**: `vyapaar-ui-app`, `vyapaar-tui`, `vyapaar-ui-charts`, `vyapaar-ui-core`.
 > **Depends on reading**:
 > - `vyapaar-ui/docs/plans/0002-quantcept-web-ux-reference.md` — note explicitly: that doc is
@@ -44,10 +66,20 @@ thin view over:
 1. **Watchlist / Dashboard** — a view over `vyapaar-market` live feeds. No new domain logic;
    consumes existing quote/candle streams.
 2. **Screener** — a view over `vyapaar-market-indicators`'s existing `screener.rs` and
-   `vyapaar-runtime-api-rest`'s `screener.rs`. **Flag, not resolve**: there are TWO screener
-   backends already in the workspace, and a UI should not be built against both without first
-   checking which one is canonical. This is a question for whoever builds this screen, not
-   answered here.
+   `vyapaar-runtime-api-rest`'s `screener.rs`. **Flag, now resolved**: there ARE two screener
+   backends in the workspace, and the UI must not be built against both. Resolution (verified by
+   direct read at implementation time):
+   - The canonical screener **wire contract** is `vyapaar_core::screener`
+     (`ScreenerScanRequest`/`ScreenerScanResponse`/`ScreenerRow`), which is what the UI's
+     `ScreenerFeature` already consumes and evaluates through the pure `apply_scan` in
+     `vyapaar-ui-api-wasm`.
+   - The production screener **HTTP backend** is `vyapaar-runtime-api`'s `/screener/scan`
+     (`vyapaar-runtime-api-rest::screener`), which serves canonical rows over a bar universe.
+   - `vyapaar-market-indicators::screener` is a standalone, simplified duplicate used only by its
+     own `tests/` in that crate; no code in `vyapaar-ui` or `vyapaar-agent` imports it. The UI
+     therefore builds only against `vyapaar_core::screener` and ignores the market-indicators
+     duplicate. (Its crate-internal tests still pass; retirement is an optional cleanup outside
+     this plan's scope.)
 3. **Backtest results viewer** — a view over `vyapaar-runtime-backtest`.
 4. **Portfolio / positions view** — a view over `vyapaar-ledger-portfolio`, and, once built, the
    target-weights output of `vyapaar-ledger-allocation` per
