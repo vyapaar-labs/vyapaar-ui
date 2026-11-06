@@ -22,8 +22,8 @@
 * **WASM Targetable**: Web crates compile cleanly to `wasm32-unknown-unknown`. Never use native OS threads or synchronous blocking filesystem calls in WASM modules.
 * **Zero Floats Policy**: All prices, ratios, returns, bounds, and metrics strictly use `rust_decimal::Decimal`.
 * **TDD & Parallel Test Directory Rule (MANDATORY)**:
-  - All tests must live in `tests/` parallel to `src/`.
-  - **STRICTLY FORBIDDEN**: In-file `#[test]` inside `src/`.
+  - All tests must live in `tests/` parallel to `src/`, or in a `src/tests/` module directory.
+  - **STRICTLY FORBIDDEN**: In-file `#[test]` inside production `src/` files.
 * **Check .agents/HANDOFF.md**: Always verify handoff status before starting work.
 
 ---
