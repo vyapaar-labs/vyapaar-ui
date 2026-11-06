@@ -1,6 +1,67 @@
+//! Unit tests for `vyapaar-ui-assets`.
+
 use std::fs;
 use std::path::PathBuf;
-use vyapaar_ui_assets::fonts::{FONTS_CSS, FontFamily};
+
+use vyapaar_ui_assets::audio::{SoundId, profile};
+use vyapaar_ui_assets::branding::{Branding, BRAND_NAME, TAGLINE};
+use vyapaar_ui_assets::fonts::{FONTS_CSS, FontFamily, FontWeight, mono_stack, sans_stack};
+use vyapaar_ui_assets::themes::{Color, ThemeId, all_themes, theme};
+
+// --- branding ---
+
+#[test]
+fn default_branding() {
+    let b = Branding::default_brand();
+    assert_eq!(b.name, BRAND_NAME);
+    assert_eq!(b.tagline, TAGLINE);
+    assert!(!b.version.is_empty());
+}
+
+// --- themes ---
+
+#[test]
+fn all_themes_cover_three_ids() {
+    let themes = all_themes();
+    assert_eq!(themes.len(), 3);
+    assert!(themes.iter().any(|t| t.id == ThemeId::Dark));
+    assert!(themes.iter().any(|t| t.id == ThemeId::Light));
+    assert!(themes.iter().any(|t| t.id == ThemeId::Amber));
+}
+
+#[test]
+fn theme_colors_are_consistent() {
+    let dark = theme(ThemeId::Dark);
+    assert_eq!(dark.background, Color::rgb(0x0D, 0x11, 0x17));
+    assert!(dark.foreground != dark.muted);
+    // hex output is uppercase RRGGBB.
+    assert_eq!(dark.brand.to_hex(), "#4FC3F7");
+}
+
+#[test]
+fn color_css_rgba_normalizes_alpha() {
+    let c = Color::rgba(255, 0, 0, 128);
+    assert_eq!(c.to_css_rgba(), "rgba(255, 0, 0, 0.50)");
+}
+
+// --- fonts: stack helpers ---
+
+#[test]
+fn font_stacks_are_cross_platform() {
+    let sans = sans_stack();
+    let mono = mono_stack();
+    assert!(sans.css().contains("\"Inter\""));
+    assert!(mono.css().contains("\"JetBrains Mono\""));
+    assert!(mono.css() != sans.css());
+}
+
+#[test]
+fn font_weight_values() {
+    assert_eq!(FontWeight::Regular.value(), 400);
+    assert_eq!(FontWeight::Bold.value(), 700);
+}
+
+// --- fonts: embedded faces (self-hosted WOFF/WOFF2) ---
 
 #[test]
 fn test_all_seven_font_families_defined() {
@@ -62,4 +123,30 @@ fn test_font_family_serde() {
         let de: FontFamily = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(*family, de);
     }
+}
+
+// --- audio ---
+
+#[test]
+fn sound_profiles_exist_for_all_ids() {
+    for id in [
+        SoundId::OrderAck,
+        SoundId::Fill,
+        SoundId::RiskReject,
+        SoundId::KillSwitch,
+        SoundId::AgentMessage,
+        SoundId::Notify,
+    ] {
+        let p = profile(id);
+        assert_eq!(p.id, id);
+        assert!(p.duration_ms > 0);
+    }
+}
+
+#[test]
+fn kill_switch_is_loudest_and_longest() {
+    let ks = profile(SoundId::KillSwitch);
+    let n = profile(SoundId::Notify);
+    assert!(ks.repeats > n.repeats);
+    assert!(ks.duration_ms > n.duration_ms);
 }

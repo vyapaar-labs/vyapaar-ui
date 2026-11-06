@@ -3,8 +3,16 @@ name = "vyapaar-ui-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Presentational UI atoms, molecules, screener primitives, and home primitives for the Vyapaar workstation"
+
+[lib]
+name = "vyapaar_ui_core"
 
 [dependencies]
-vyapaar-core = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
+vyapaar-core.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+rust_decimal.workspace = true
+chrono.workspace = true

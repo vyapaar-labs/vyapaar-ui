@@ -1,14 +1,13 @@
 //! Typography & font asset definitions for Vyapaar UI.
 //!
-//! Provides family constants, weights, and embedded stylesheets for
-//! the 7 primary font families:
-//! - **Roboto Mono**: Primary financial monospace (order books, tapes, numbers).
-//! - **IBM Plex Sans**: Technical UI and dense data table typography.
-//! - **IBM Plex Mono**: Alternative code/terminal monospace.
-//! - **Silkscreen**: Retro pixel/terminal accent typography.
-//! - **Inter**: Clean modern dashboard and natural language typography.
-//! - **Source Sans 3**: Editorial, documentation, and narrative analysis typography.
-//! - **Noto Sans**: Broad unicode fallback and multilingual display.
+//! Two complementary halves live in this module:
+//!
+//! 1. **Embedded faces** — the [`FontFamily`] registry and [`FONTS_CSS`]
+//!    stylesheet for the 7 self-hosted WOFF/WOFF2 families:
+//!    Roboto Mono, IBM Plex Sans, IBM Plex Mono, Silkscreen, Inter,
+//!    Source Sans 3, and Noto Sans.
+//! 2. **Stack helpers** — [`FontStack`], [`sans_stack`], [`mono_stack`], and
+//!    [`FontWeight`] for cross-platform CSS font stacks.
 
 use serde::{Deserialize, Serialize};
 
@@ -110,6 +109,88 @@ impl FontFamily {
             Self::Inter => "inter",
             Self::SourceSans3 => "source-sans-3",
             Self::NotoSans => "noto-sans",
+        }
+    }
+}
+
+/// A cross-platform font stack (ordered fallback families).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FontStack {
+    /// Stack name.
+    pub name: String,
+    /// Ordered font families, first choice first.
+    pub families: Vec<String>,
+}
+
+impl FontStack {
+    /// Create a new font stack.
+    pub fn new(name: impl Into<String>, families: Vec<String>) -> Self {
+        Self {
+            name: name.into(),
+            families,
+        }
+    }
+
+    /// Join families into a CSS `font-family` value.
+    pub fn css(&self) -> String {
+        self.families
+            .iter()
+            .map(|f| format!("\"{f}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+/// Default proportional font stack (UI).
+pub fn sans_stack() -> FontStack {
+    FontStack::new(
+        "sans",
+        vec![
+            "Inter".into(),
+            "Segoe UI".into(),
+            "system-ui".into(),
+            "-apple-system".into(),
+            "sans-serif".into(),
+        ],
+    )
+}
+
+/// Default monospace font stack (terminal / code).
+pub fn mono_stack() -> FontStack {
+    FontStack::new(
+        "mono",
+        vec![
+            "JetBrains Mono".into(),
+            "SFMono-Regular".into(),
+            "Menlo".into(),
+            "Consolas".into(),
+            "monospace".into(),
+        ],
+    )
+}
+
+/// Font weight.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FontWeight {
+    /// 400.
+    Regular,
+    /// 500.
+    Medium,
+    /// 600.
+    Semibold,
+    /// 700.
+    Bold,
+}
+
+impl FontWeight {
+    /// Numeric weight value.
+    pub const fn value(self) -> u16 {
+        match self {
+            Self::Regular => 400,
+            Self::Medium => 500,
+            Self::Semibold => 600,
+            Self::Bold => 700,
         }
     }
 }
