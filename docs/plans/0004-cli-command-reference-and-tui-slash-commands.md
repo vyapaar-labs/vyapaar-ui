@@ -1,6 +1,7 @@
 # 0004 — Full CLI Command Reference & Interactive TUI Slash Command Palette
 
-> **Status**: Ready for implementation.
+> **Status**: Implemented.
+> **Definitive Reference**: [`vyapaar-ui/docs/reference/cli-and-tui.md`](file:///home/pmallapp/Devel/Finance/vyapaar-labs/vyapaar-ui/docs/reference/cli-and-tui.md)
 > **Target Crates**: `vyapaar-cli`, `vyapaar-tui`, `vyapaar-highlight`.
 > **Depends on reading**:
 > - `vyapaar-ui/docs/plans/0001-agent-chat-terminal-from-artha.md`
@@ -16,8 +17,8 @@
 ## 0. Executive Summary & Objective
 
 Quantcept establishes a two-layer interface model for quantitative workstations:
-1. **Headless & Operating System CLI**: High-throughput terminal subcommands (`ask`, `jobs`, `plugin`, `memory`, `verify`, `doctor`, `purge`) suitable for cron tasks, pipeline scripts, and non-interactive developer workflows.
-2. **Interactive TUI Slash Commands**: In-terminal modal palette and quick-actions (`/help`, `/agent`, `/memory`, `/jobs`, `/checkpoints`, `/undo`, `/export`, `/positions`) operable via `/` or `Ctrl+P`.
+1. **Headless & Operating System CLI**: High-throughput terminal subcommands (`ask`, `jobs`, `plugin`, `memory`, `verify`, `doctor`, `purge`, `skills`, `mcp`) suitable for cron tasks, pipeline scripts, and non-interactive developer workflows.
+2. **Interactive TUI Slash Commands**: In-terminal modal palette and quick-actions (`/help`, `/agent`, `/memory`, `/jobs`, `/checkpoints`, `/undo`, `/export`, `/positions`, etc.) operable via `/` or `Ctrl+P`.
 
 This document specifies the exact mapping, argument structures, and implementation plan for bringing the full CLI and Slash Command surface into `vyapaar-cli` and `vyapaar-tui`.
 
@@ -33,11 +34,11 @@ This document specifies the exact mapping, argument structures, and implementati
 │   (Headless Binary Commands)      │    (Interactive Multi-Tab TUI)     │
 │                                   │                                    │
 │  • vyapaar [message] [--continue] │  • Command Palette (/ or Ctrl+P)   │
-│  • vyapaar ask <prompt>           │  • In-Session Slash Commands       │
+│  • vyapaar ask <prompt>           │  • In-Session Slash Commands (40)  │
 │  • vyapaar jobs {add,list,run...} │    - /agent <name|off|default>     │
 │  • vyapaar verify [file]          │    - /undo, /redo, /checkpoints    │
 │  • vyapaar memory {tick,stats...} │    - /export <json|txt>            │
-│  • vyapaar plugin / skills        │    - /jobs, /positions, /memory    │
+│  • vyapaar plugin / skills / mcp  │    - /jobs, /positions, /memory    │
 │  • vyapaar doctor [--fix]         │    - /theme <dark|light>           │
 │  • vyapaar purge [--yes]          │  • Autocomplete & Modal Navigation │
 └─────────────────┬─────────────────┴──────────────────┬─────────────────┘
@@ -64,9 +65,14 @@ This document specifies the exact mapping, argument structures, and implementati
 vyapaar [OPTIONS] [COMMAND]
 
 Global Options:
-  --log-level <debug|info|warn|error|silent>  [env: VYAPAAR_LOG_LEVEL]
+  -m, --model-path <PATH>                    Path to local GGUF model file
+  -t, --temperature <FLOAT>                  Sampling temperature
+      --log-level <debug|info|warn|error|silent>  [env: VYAPAAR_LOG_LEVEL]
   -v, --verbose                              Shortcut for --log-level debug
   -q, --quiet                                Shortcut for --log-level silent
+      --skip-permissions                     Auto-accept tool confirmation prompts
+  -c, --continue                             Resumes latest session in current directory
+  -r, --resume [session_id]                  Resumes specific session or opens session picker
   -h, --help                                 Print help
   -V, --version                              Print version
 ```
@@ -98,15 +104,19 @@ Enables autonomous research and market monitoring that runs without manual super
 ```bash
 vyapaar jobs add <goal...> [OPTIONS]
   Options:
-    --schedule <cron>       Standard 5-field cron expression (e.g. "0 9 * * 1-5")
+    --schedule <cron|json>  Standard 5-field cron expression (e.g. "0 9 * * 1-5") or JSON
     --max-turns <N>         Maximum conversation turns per run (default: 20)
     --max-inr <N>           Maximum statutory/data cost budget in INR
+    --max-usd <N>           Maximum compute budget in USD
     --max-tokens <N>        Maximum token consumption budget
     --max-tool-calls <N>    Maximum tool executions permitted
+    --max-data-calls <N>    Maximum data calls permitted
     --missed-policy <skip|catch_up>
+    --success <json>        Success evaluation criteria JSON
     --read-only             Enforce pure advisory mode (default: true)
     --once                  Run immediately once and exit
 
+vyapaar jobs                # Defaults to listing jobs
 vyapaar jobs list           # Lists registered jobs with status, next run, and budgets
 vyapaar jobs run <id>       # Manually triggers an immediate job run
 vyapaar jobs tick [--all]   # Evaluates cron schedules against system time (called by systemd/cron)
@@ -137,7 +147,8 @@ Checks performed:
 ```bash
 vyapaar memory tick         # Condenses recent chat transcripts into semantic memory facts
 vyapaar memory stats        # Displays memory index statistics (notes, vectors, disk size)
-vyapaar memory import <dir> # Ingests external research documents, notes, or PDFs
+vyapaar memory model [name] # Gets or sets embedding model
+vyapaar memory import [dir] # Ingests external research documents, notes, or PDFs
 vyapaar memory install      # Prints systemd timer snippet for periodic memory distillation
 ```
 
@@ -150,7 +161,7 @@ Diagnostics:
   • SEBI pre-trade risk engine configuration
   • Local SQLite database integrity (sessions, memory, ledger)
   • Python virtual environment & quantitative dependencies
-  • Active broker API credentials & connectivity
+  • In-process Candle GGUF SmolLM2 and OpenAI streaming status
   Flag --fix: Automatically provisions missing directories, SQLite tables, and dependencies.
 ```
 
@@ -182,59 +193,11 @@ Within `vyapaar-tui`, pressing `/` in the prompt composer or `Ctrl+P` anywhere o
 └────────────────────────────────────────────────────────┘
 ```
 
-### 3.1 Complete Slash Command Catalog
+### 3.1 Complete Slash Command Catalog (40 Commands)
 
-| Command | Arguments | Scope | Functionality |
-| :--- | :--- | :--- | :--- |
-| **`/help`** | `[command]` | Global | Displays command reference or detailed syntax for a specific command. |
-| **`/agent`** | `<name\|off\|default>` | Session | Switches the active persona (`quant`, `analyst`, `trader`, etc.) or resets to base. |
-| **`/new`** | None | Global | Archives the current turn context and starts a fresh conversation session. |
-| **`/resume`** | `[session_id]` | Global | Opens the session history picker to switch conversations. |
-| **`/clear`** | None | Session | Clears visual scrollback history from the active terminal buffer. |
-| **`/copy`** | `[full\|tools]` | Session | Copies the latest answer, full turn transcript, or tool outputs to clipboard. |
-| **`/export`** | `<json\|txt>` | Session | Exports the conversation transcript to `~/Downloads/vyapaar/`. |
-| **`/undo`** | None | Session | Reverts the last conversation turn, removing it from context. |
-| **`/redo`** | None | Session | Restores a previously undone conversation turn. |
-| **`/checkpoints`**| None | Session | Lists and restores saved turn checkpoints within the session. |
-| **`/auto`** | None | Session | Toggles auto-approval for low-risk advisory tools. |
-| **`/theme`** | `<dark\|light>` | Global | Switches the UI color palette between Dark and Light mode. |
-| **`/perf`** | None | Global | Displays CPU, memory usage, and turn inference latency statistics. |
-| **`/context`** | None | Session | Visualizes current context token budget (system prompt, tools, memory, history). |
-| **`/remember`** | `<fact>` | Global | Immediately saves a permanent knowledge fact to local memory. |
-| **`/memory`** | None | Global | Opens the interactive memory inspector modal (browse notes, edit, delete with `d`).|
-| **`/jobs`** | None | Global | Opens the interactive background jobs manager (view schedules, run, edit, delete).|
-| **`/positions`** | None | Global | Opens active paper trading positions, open orders, and PnL breakdown. |
-| **`/skills`** | None | Global | Lists installed financial skills and allowed tool sets. |
-| **`/mcp`** | None | Global | Lists connected MCP servers or live-connects a new server. |
-| **`/verify`** | `[file]` | Session | Triggers in-session lookahead bias scan on a strategy file. |
-| **`/quit`, `/exit`**| None | Global | Closes the TUI cleanly, preserving session state. |
-
-### 3.2 Modal Keyboard Navigation Rules
-- **`Up` / `Down`**: Navigate selection lists within modals.
-- **`Enter`**: Confirm selection or advance form field.
-- **`Esc`**: Dismiss active modal or step back to the main workstation tab.
-- **`Tab`**: Autocomplete highlighted slash command.
-- **`d`**: Delete highlighted item (inside `/jobs`, `/memory`, or `/checkpoints`).
-- **`e`**: Edit highlighted item.
+Full documentation for all 40 commands is available in [`vyapaar-ui/docs/reference/cli-and-tui.md`](file:///home/pmallapp/Devel/Finance/vyapaar-labs/vyapaar-ui/docs/reference/cli-and-tui.md).
 
 ---
 
-## 4. Implementation Phases
-
-### Phase 1: `vyapaar-cli` Clap Command Tree
-- Refactor `crates/vyapaar-cli/src/lib.rs` to replace the 5-command stub with the full `Command` enum:
-  `Tui`, `Ask`, `Jobs`, `Verify`, `Memory`, `Plugin`, `Skills`, `Doctor`, `Purge`, `Mcp`, `Scan`.
-- Connect each subcommand to corresponding backend service ports.
-
-### Phase 2: `vyapaar-tui` Palette & Slash Command Parser
-- Implement `SlashCommand` enum and tokenizer in `crates/vyapaar-tui/src/slash.rs`.
-- Build the `PaletteWidget` popup overlay rendered above the active tab when `/` or `Ctrl+P` is active.
-- Wire modal hotkeys (`Up`, `Down`, `Enter`, `Esc`, `Tab`, `d`).
-
-### Phase 3: Headless Execution & Output Formatters
-- Support `--format json` and `--quiet` across all CLI subcommands for headless scripting.
-- Implement ANSI progress bars and stderr chatter separation in `vyapaar ask`.
-
-### Phase 4: Integration & Conformance Tests
-- Write automated tests in `crates/vyapaar-cli/tests/` for CLI flag parsing and exit codes.
-- Test TUI slash command handling in `crates/vyapaar-tui/tests/`.
+## 4. Implementation Status
+All phases (Phase 1 Clap command tree, Phase 2 TUI slash palette & hotkeys, Phase 3 headless stream separation & JSON, and Phase 4 unit & integration test suites) are fully implemented and verified via `cargo test -p vyapaar-cli -p vyapaar-tui`.
