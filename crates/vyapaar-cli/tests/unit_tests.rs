@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use vyapaar_agent_llm::ScriptedFakeLlm;
 use vyapaar_cli::args::{
-    AskArgs, ChatArgs, Cli, CliArgs, CliCommand, Command, DoctorArgs, JobsArgs, MemoryArgs,
-    PluginArgs, PurgeArgs, ScanArgs, VerifyArgs,
+    AskArgs, ChatArgs, Cli, CliArgs, CliCommand, Command, DoctorArgs, JobsArgs, LogLevel,
+    MarketplaceArgs, McpArgs, MemoryArgs, OutputFormat, PluginArgs, PurgeArgs, ScanArgs,
+    SkillsArgs, VerifyArgs, resolve_log_level,
 };
 use vyapaar_cli::runner::{CliError, CommandOutcome, run, run_with_provider};
 
@@ -18,8 +19,23 @@ fn parse_cli_roundtrip_tui() {
         ..Default::default()
     };
     let args: CliArgs = cli.into();
-    assert_eq!(args.command, Command::Tui);
+    assert_eq!(args.command, Command::Tui { message: None });
     assert_eq!(args.model_path, None);
+}
+
+#[test]
+fn parse_cli_with_initial_message() {
+    let cli = Cli {
+        message: Some("What is NIFTY?".into()),
+        ..Default::default()
+    };
+    let args: CliArgs = cli.into();
+    assert_eq!(
+        args.command,
+        Command::Tui {
+            message: Some("What is NIFTY?".into())
+        }
+    );
 }
 
 #[test]
@@ -28,11 +44,46 @@ fn parse_cli_roundtrip_ask() {
         command: Some(CliCommand::Ask {
             prompt: "what is NIFTY?".into(),
             timeout_min: 20,
+            persona: Some("quant".into()),
+            mode: "paper".into(),
+            profile: "default".into(),
+            format: OutputFormat::Json,
         }),
         ..Default::default()
     };
     let args: CliArgs = cli.into();
-    assert_eq!(args.command, Command::Ask(AskArgs::new("what is NIFTY?")));
+    assert_eq!(
+        args.command,
+        Command::Ask(AskArgs {
+            prompt: "what is NIFTY?".into(),
+            timeout_min: 20,
+            persona: Some("quant".into()),
+            mode: "paper".into(),
+            profile: "default".into(),
+            format: OutputFormat::Json,
+        })
+    );
+}
+
+#[test]
+fn test_log_level_precedence() {
+    // 1. Quiet flag sets Silent
+    assert_eq!(
+        resolve_log_level(Some(LogLevel::Debug), false, true),
+        LogLevel::Silent
+    );
+    // 2. Verbose flag sets Debug
+    assert_eq!(
+        resolve_log_level(Some(LogLevel::Info), true, false),
+        LogLevel::Debug
+    );
+    // 3. Explicit flag
+    assert_eq!(
+        resolve_log_level(Some(LogLevel::Warn), false, false),
+        LogLevel::Warn
+    );
+    // 4. Default is Info
+    assert_eq!(resolve_log_level(None, false, false), LogLevel::Info);
 }
 
 #[test]
@@ -107,7 +158,7 @@ fn parse_cli_roundtrip_doctor_and_purge() {
 #[test]
 fn run_tui_reports_launch() {
     let cli = CliArgs {
-        command: Command::Tui,
+        command: Command::Tui { message: None },
         ..Default::default()
     };
     assert_eq!(run(&cli).unwrap(), CommandOutcome::LaunchedTui);
@@ -136,6 +187,29 @@ fn run_ask_succeeds_with_injected_provider() {
     match outcome {
         CommandOutcome::Answer(ans) => {
             assert!(ans.contains("NIFTY 50 is the benchmark"));
+        }
+        other => panic!("expected Answer, got {other:?}"),
+    }
+}
+
+#[test]
+fn run_ask_json_format() {
+    let fake = ScriptedFakeLlm::new("test-fake-llm");
+    fake.push_text_response("Target return achieved.");
+
+    let mut ask_args = AskArgs::new("calculate Sharpe");
+    ask_args.format = OutputFormat::Json;
+    ask_args.persona = Some("quant".into());
+
+    let cli = CliArgs {
+        command: Command::Ask(ask_args),
+        ..Default::default()
+    };
+
+    let outcome = run_with_provider(&cli, Some(Arc::new(fake))).unwrap();
+    match outcome {
+        CommandOutcome::Answer(ans) => {
+            assert!(ans.contains("Target return achieved."));
         }
         other => panic!("expected Answer, got {other:?}"),
     }
@@ -225,9 +299,12 @@ fn run_jobs_lifecycle() {
             schedule: Some("0 9 * * 1-5".into()),
             max_turns: 20,
             max_inr: None,
+            max_usd: None,
             max_tokens: Some(4000),
             max_tool_calls: Some(10),
+            max_data_calls: Some(5),
             missed_policy: vyapaar_cli::args::MissedPolicy::Skip,
+            success: None,
             read_only: true,
             once: false,
         }),
@@ -374,6 +451,50 @@ fn run_memory_and_plugin_commands() {
             assert!(list.contains("Installed plugins"));
         }
         other => panic!("expected PluginSuccess, got {other:?}"),
+    }
+
+    let market_cli = CliArgs {
+        command: Command::Plugin(PluginArgs::Marketplace(MarketplaceArgs::List)),
+        ..Default::default()
+    };
+    let outcome = run(&market_cli).unwrap();
+    match outcome {
+        CommandOutcome::PluginSuccess(list) => {
+            assert!(list.contains("Marketplace"));
+        }
+        other => panic!("expected Marketplace, got {other:?}"),
+    }
+}
+
+#[test]
+fn run_skills_and_mcp_commands() {
+    let skills_cli = CliArgs {
+        command: Command::Skills(SkillsArgs::List),
+        ..Default::default()
+    };
+    let outcome = run(&skills_cli).unwrap();
+    match outcome {
+        CommandOutcome::SkillsSuccess(skills) => {
+            assert!(skills.contains("The 8 Quant Desks"));
+            assert!(skills.contains("quant"));
+            assert!(skills.contains("analyst"));
+            assert!(skills.contains("trader"));
+        }
+        other => panic!("expected SkillsSuccess, got {other:?}"),
+    }
+
+    let mcp_cli = CliArgs {
+        command: Command::Mcp(McpArgs::List),
+        ..Default::default()
+    };
+    let outcome = run(&mcp_cli).unwrap();
+    match outcome {
+        CommandOutcome::McpSuccess(mcp) => {
+            assert!(mcp.contains("MCP"));
+            assert!(mcp.contains("context7"));
+            assert!(mcp.contains("github"));
+        }
+        other => panic!("expected McpSuccess, got {other:?}"),
     }
 }
 

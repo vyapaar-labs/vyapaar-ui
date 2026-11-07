@@ -13,6 +13,26 @@ pub enum LogLevel {
     Silent,
 }
 
+impl LogLevel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Debug => "debug",
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Error => "error",
+            Self::Silent => "silent",
+        }
+    }
+}
+
+/// Output format for ask and other machine-readable commands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
+pub enum OutputFormat {
+    #[default]
+    Text,
+    Json,
+}
+
 /// Missed schedule policy for jobs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
 pub enum MissedPolicy {
@@ -29,6 +49,18 @@ pub struct AskArgs {
     /// Maximum timeout in minutes (default 20).
     #[arg(long, default_value = "20")]
     pub timeout_min: u64,
+    /// Specialized financial persona (quant, analyst, trader, risk-manager, etc.).
+    #[arg(long)]
+    pub persona: Option<String>,
+    /// Runtime execution mode (paper, backtest).
+    #[arg(long, default_value = "paper")]
+    pub mode: String,
+    /// Configuration profile.
+    #[arg(long, default_value = "default")]
+    pub profile: String,
+    /// Output format (text or json).
+    #[arg(long, value_enum, default_value = "text")]
+    pub format: OutputFormat,
 }
 
 impl AskArgs {
@@ -37,6 +69,10 @@ impl AskArgs {
         Self {
             prompt: prompt.into(),
             timeout_min: 20,
+            persona: None,
+            mode: "paper".to_string(),
+            profile: "default".to_string(),
+            format: OutputFormat::Text,
         }
     }
 }
@@ -64,9 +100,12 @@ pub enum JobsArgs {
         schedule: Option<String>,
         max_turns: usize,
         max_inr: Option<rust_decimal::Decimal>,
+        max_usd: Option<rust_decimal::Decimal>,
         max_tokens: Option<usize>,
         max_tool_calls: Option<usize>,
+        max_data_calls: Option<usize>,
         missed_policy: MissedPolicy,
+        success: Option<String>,
         read_only: bool,
         once: bool,
     },
@@ -97,7 +136,7 @@ pub enum JobsArgs {
 }
 
 /// Arguments for `vyapaar verify`.
-#[derive(Debug, Clone, PartialEq, Eq, Args)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Args)]
 pub struct VerifyArgs {
     /// Path to the strategy file or algorithm script to verify.
     pub file: Option<PathBuf>,
@@ -112,8 +151,17 @@ pub enum MemoryArgs {
     Tick,
     Stats,
     Model { name: Option<String> },
-    Import { path: PathBuf },
+    Import { path: Option<PathBuf> },
     Install,
+}
+
+/// Marketplace subcommands for plugin management.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MarketplaceArgs {
+    Add { source: String },
+    List,
+    Remove { name: String },
+    Update { name: Option<String> },
 }
 
 /// Arguments for `vyapaar plugin`.
@@ -125,6 +173,21 @@ pub enum PluginArgs {
     Enable { name: String },
     Disable { name: String },
     Validate { path: Option<PathBuf> },
+    Marketplace(MarketplaceArgs),
+}
+
+/// Arguments for `vyapaar skills`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SkillsArgs {
+    List,
+    Show { name: String },
+}
+
+/// Arguments for `vyapaar mcp`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum McpArgs {
+    List,
+    Connect { name: String, command: String },
 }
 
 /// Arguments for `vyapaar doctor`.
@@ -153,7 +216,10 @@ pub struct PurgeArgs {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     /// Launch the Ratatui terminal workstation.
-    Tui,
+    Tui {
+        /// Optional initial message or query.
+        message: Option<String>,
+    },
     /// Ask the agent one headless question.
     Ask(AskArgs),
     /// Interactive conversational chat with the agent.
@@ -168,6 +234,10 @@ pub enum Command {
     Memory(MemoryArgs),
     /// Manage plugins, skills, and extensions.
     Plugin(PluginArgs),
+    /// Manage financial skills and tool sets.
+    Skills(SkillsArgs),
+    /// Manage Model Context Protocol (MCP) servers and tools.
+    Mcp(McpArgs),
     /// Diagnostic environment check and automatic repair.
     Doctor(DoctorArgs),
     /// Purge temporary caches and session traces.
@@ -185,8 +255,8 @@ pub struct CliArgs {
     pub model_path: Option<PathBuf>,
     /// Sampling temperature (0.0 to 1.0).
     pub temperature: Option<f64>,
-    /// Log level.
-    pub log_level: Option<LogLevel>,
+    /// Effective resolved log level.
+    pub log_level: LogLevel,
     /// Verbose output flag.
     pub verbose: bool,
     /// Quiet output flag.
@@ -197,20 +267,23 @@ pub struct CliArgs {
     pub r#continue: bool,
     /// Resume session by ID.
     pub resume: Option<String>,
+    /// Optional initial message for terminal launch.
+    pub message: Option<String>,
 }
 
 impl Default for CliArgs {
     fn default() -> Self {
         Self {
-            command: Command::Tui,
+            command: Command::Tui { message: None },
             model_path: None,
             temperature: None,
-            log_level: None,
+            log_level: LogLevel::Info,
             verbose: false,
             quiet: false,
             skip_permissions: false,
             r#continue: false,
             resume: None,
+            message: None,
         }
     }
 }
@@ -220,15 +293,50 @@ pub fn parse() -> CliArgs {
     <Cli as clap::Parser>::parse().into()
 }
 
+/// Resolve effective log level honoring Quantcept precedence:
+/// 1. VYAPAAR_LOG_LEVEL or QUANTCEPT_LOG_LEVEL env var
+/// 2. Explicit flag `--log-level`
+/// 3. `--verbose` (debug) / `--quiet` (silent)
+/// 4. settings.json (if present)
+/// 5. default: info
+pub fn resolve_log_level(flag_level: Option<LogLevel>, verbose: bool, quiet: bool) -> LogLevel {
+    if quiet {
+        return LogLevel::Silent;
+    }
+    if verbose {
+        return LogLevel::Debug;
+    }
+    if let Ok(env_lvl) =
+        std::env::var("VYAPAAR_LOG_LEVEL").or_else(|_| std::env::var("QUANTCEPT_LOG_LEVEL"))
+    {
+        match env_lvl.trim().to_lowercase().as_str() {
+            "debug" => return LogLevel::Debug,
+            "info" => return LogLevel::Info,
+            "warn" | "warning" => return LogLevel::Warn,
+            "error" => return LogLevel::Error,
+            "silent" | "off" => return LogLevel::Silent,
+            _ => {}
+        }
+    }
+    if let Some(lvl) = flag_level {
+        return lvl;
+    }
+    LogLevel::Info
+}
+
 /// The clap-defined CLI structure.
 #[derive(Debug, Parser, Clone, PartialEq)]
 #[command(
     name = "vyapaar",
     version,
     about = "Vyapaar Indian equities quantitative AI workstation & CLI",
-    long_about = "vyapaar [message] | vyapaar ask <prompt> | vyapaar chat | vyapaar jobs | vyapaar verify | vyapaar doctor"
+    long_about = "vyapaar [message] | vyapaar ask <prompt> | vyapaar jobs | vyapaar verify | vyapaar doctor"
 )]
 pub struct Cli {
+    /// Optional initial prompt or message to launch the workstation with.
+    #[arg(value_name = "MESSAGE")]
+    pub message: Option<String>,
+
     /// Optional path to a local GGUF model file (SmolLM2, etc.).
     #[arg(short = 'm', long = "model-path", global = true)]
     pub model_path: Option<PathBuf>,
@@ -272,6 +380,7 @@ pub struct Cli {
 impl Default for Cli {
     fn default() -> Self {
         Self {
+            message: None,
             model_path: None,
             temperature: None,
             log_level: None,
@@ -297,6 +406,18 @@ pub enum CliCommand {
         /// Maximum timeout in minutes (default 20).
         #[arg(long, default_value = "20")]
         timeout_min: u64,
+        /// Specialized financial persona (quant, analyst, trader, etc.).
+        #[arg(long)]
+        persona: Option<String>,
+        /// Runtime execution mode (paper, backtest).
+        #[arg(long, default_value = "paper")]
+        mode: String,
+        /// Configuration profile.
+        #[arg(long, default_value = "default")]
+        profile: String,
+        /// Output format (text or json).
+        #[arg(long, value_enum, default_value = "text")]
+        format: OutputFormat,
     },
     /// Interactive conversational chat with the agent.
     Chat {
@@ -312,7 +433,7 @@ pub enum CliCommand {
     /// Manage autonomous scheduled jobs and approvals.
     Jobs {
         #[command(subcommand)]
-        subcommand: JobsSubcommand,
+        subcommand: Option<JobsSubcommand>,
     },
     /// Verify a strategy file for lookahead bias and data leakage.
     Verify {
@@ -325,12 +446,22 @@ pub enum CliCommand {
     /// Manage local semantic financial memory and distillation.
     Memory {
         #[command(subcommand)]
-        subcommand: MemorySubcommand,
+        subcommand: Option<MemorySubcommand>,
     },
     /// Manage plugins, skills, and extensions.
     Plugin {
         #[command(subcommand)]
-        subcommand: PluginSubcommand,
+        subcommand: Option<PluginSubcommand>,
+    },
+    /// Manage installed financial skills and tool sets.
+    Skills {
+        #[command(subcommand)]
+        subcommand: Option<SkillsSubcommand>,
+    },
+    /// Manage Model Context Protocol (MCP) servers and tools.
+    Mcp {
+        #[command(subcommand)]
+        subcommand: Option<McpSubcommand>,
     },
     /// Diagnostic environment check and automatic repair.
     Doctor {
@@ -360,8 +491,9 @@ pub enum JobsSubcommand {
     /// Add a new autonomous scheduled research job.
     Add {
         /// Natural language goal or task.
+        #[arg(required = true, num_args = 1..)]
         goal: Vec<String>,
-        /// Cron schedule expression (e.g. "30 7 * * 1-5").
+        /// Cron schedule expression (e.g. "30 7 * * 1-5") or schedule JSON.
         #[arg(long)]
         schedule: Option<String>,
         /// Max conversation turns per run (default: 20).
@@ -370,17 +502,26 @@ pub enum JobsSubcommand {
         /// Max cost budget in INR (statutory/data/compute).
         #[arg(long)]
         max_inr: Option<rust_decimal::Decimal>,
+        /// Max cost budget in USD.
+        #[arg(long)]
+        max_usd: Option<rust_decimal::Decimal>,
         /// Max token consumption cap.
         #[arg(long)]
         max_tokens: Option<usize>,
         /// Max tool calls permitted.
         #[arg(long)]
         max_tool_calls: Option<usize>,
+        /// Max data calls permitted.
+        #[arg(long)]
+        max_data_calls: Option<usize>,
         /// Policy when a scheduled run is missed.
         #[arg(long, value_enum, default_value = "skip")]
         missed_policy: MissedPolicy,
+        /// Optional success criteria JSON.
+        #[arg(long)]
+        success: Option<String>,
         /// Enforce read-only advisory mode.
-        #[arg(long, default_value = "true")]
+        #[arg(long, default_value = "true", action = clap::ArgAction::Set)]
         read_only: bool,
         /// Run immediately once and exit.
         #[arg(long)]
@@ -445,10 +586,32 @@ pub enum MemorySubcommand {
     /// Import research notes, PDFs, or strategy markdown into local memory.
     Import {
         /// Path to directory or file to ingest.
-        path: PathBuf,
+        path: Option<PathBuf>,
     },
     /// Print systemd/cron timer snippet for memory auto-distillation.
     Install,
+}
+
+/// Plugin marketplace subcommands.
+#[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
+pub enum MarketplaceSubcommand {
+    /// Add an external marketplace source.
+    Add {
+        /// Marketplace source URL or path.
+        source: String,
+    },
+    /// List marketplace sources and available packages.
+    List,
+    /// Remove an external marketplace source.
+    Remove {
+        /// Source identifier or name.
+        name: String,
+    },
+    /// Update marketplace sources.
+    Update {
+        /// Optional marketplace name to update.
+        name: Option<String>,
+    },
 }
 
 /// Plugin subcommands.
@@ -481,71 +644,139 @@ pub enum PluginSubcommand {
         /// Path to plugin manifest directory.
         path: Option<PathBuf>,
     },
+    /// Manage plugin marketplace sources.
+    Marketplace {
+        #[command(subcommand)]
+        action: MarketplaceSubcommand,
+    },
+}
+
+/// Skills subcommands.
+#[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
+pub enum SkillsSubcommand {
+    /// List all installed financial skills.
+    List,
+    /// Display details for a financial skill.
+    Show {
+        /// Skill name (e.g. quant, analyst, trader).
+        name: String,
+    },
+}
+
+/// MCP subcommands.
+#[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
+pub enum McpSubcommand {
+    /// List connected MCP servers.
+    List,
+    /// Connect a new MCP server.
+    Connect {
+        /// Server name.
+        name: String,
+        /// Command or endpoint to connect.
+        command: String,
+    },
 }
 
 impl From<Cli> for CliArgs {
     fn from(cli: Cli) -> Self {
+        let log_level = resolve_log_level(cli.log_level, cli.verbose, cli.quiet);
+        let message = cli.message.clone();
+
         let command = match cli.command {
-            None | Some(CliCommand::Tui) => Command::Tui,
+            None | Some(CliCommand::Tui) => Command::Tui {
+                message: message.clone(),
+            },
             Some(CliCommand::Ask {
                 prompt,
                 timeout_min,
+                persona,
+                mode,
+                profile,
+                format,
             }) => Command::Ask(AskArgs {
                 prompt,
                 timeout_min,
+                persona,
+                mode,
+                profile,
+                format,
             }),
             Some(CliCommand::Chat { system_prompt }) => Command::Chat(ChatArgs { system_prompt }),
             Some(CliCommand::Scan { query }) => Command::Scan(ScanArgs { query }),
             Some(CliCommand::Jobs { subcommand }) => Command::Jobs(match subcommand {
-                JobsSubcommand::Add {
+                None | Some(JobsSubcommand::List) => JobsArgs::List,
+                Some(JobsSubcommand::Add {
                     goal,
                     schedule,
                     max_turns,
                     max_inr,
+                    max_usd,
                     max_tokens,
                     max_tool_calls,
+                    max_data_calls,
                     missed_policy,
+                    success,
                     read_only,
                     once,
-                } => JobsArgs::Add {
+                }) => JobsArgs::Add {
                     goal: goal.join(" "),
                     schedule,
                     max_turns,
                     max_inr,
+                    max_usd,
                     max_tokens,
                     max_tool_calls,
+                    max_data_calls,
                     missed_policy,
+                    success,
                     read_only,
                     once,
                 },
-                JobsSubcommand::List => JobsArgs::List,
-                JobsSubcommand::Run { id } => JobsArgs::Run { id },
-                JobsSubcommand::Tick { all } => JobsArgs::Tick { all },
-                JobsSubcommand::Install => JobsArgs::Install,
-                JobsSubcommand::Logs { id } => JobsArgs::Logs { id },
-                JobsSubcommand::Pause { id } => JobsArgs::Pause { id },
-                JobsSubcommand::Resume { id } => JobsArgs::Resume { id },
-                JobsSubcommand::Approvals => JobsArgs::Approvals,
-                JobsSubcommand::Approve { id } => JobsArgs::Approve { id },
-                JobsSubcommand::Deny { id } => JobsArgs::Deny { id },
+                Some(JobsSubcommand::Run { id }) => JobsArgs::Run { id },
+                Some(JobsSubcommand::Tick { all }) => JobsArgs::Tick { all },
+                Some(JobsSubcommand::Install) => JobsArgs::Install,
+                Some(JobsSubcommand::Logs { id }) => JobsArgs::Logs { id },
+                Some(JobsSubcommand::Pause { id }) => JobsArgs::Pause { id },
+                Some(JobsSubcommand::Resume { id }) => JobsArgs::Resume { id },
+                Some(JobsSubcommand::Approvals) => JobsArgs::Approvals,
+                Some(JobsSubcommand::Approve { id }) => JobsArgs::Approve { id },
+                Some(JobsSubcommand::Deny { id }) => JobsArgs::Deny { id },
             }),
             Some(CliCommand::Verify { file, strict }) => {
                 Command::Verify(VerifyArgs { file, strict })
             }
             Some(CliCommand::Memory { subcommand }) => Command::Memory(match subcommand {
-                MemorySubcommand::Tick => MemoryArgs::Tick,
-                MemorySubcommand::Stats => MemoryArgs::Stats,
-                MemorySubcommand::Model { name } => MemoryArgs::Model { name },
-                MemorySubcommand::Import { path } => MemoryArgs::Import { path },
-                MemorySubcommand::Install => MemoryArgs::Install,
+                None | Some(MemorySubcommand::Stats) => MemoryArgs::Stats,
+                Some(MemorySubcommand::Tick) => MemoryArgs::Tick,
+                Some(MemorySubcommand::Model { name }) => MemoryArgs::Model { name },
+                Some(MemorySubcommand::Import { path }) => MemoryArgs::Import { path },
+                Some(MemorySubcommand::Install) => MemoryArgs::Install,
             }),
             Some(CliCommand::Plugin { subcommand }) => Command::Plugin(match subcommand {
-                PluginSubcommand::List => PluginArgs::List,
-                PluginSubcommand::Install { name } => PluginArgs::Install { name },
-                PluginSubcommand::Uninstall { name } => PluginArgs::Uninstall { name },
-                PluginSubcommand::Enable { name } => PluginArgs::Enable { name },
-                PluginSubcommand::Disable { name } => PluginArgs::Disable { name },
-                PluginSubcommand::Validate { path } => PluginArgs::Validate { path },
+                None | Some(PluginSubcommand::List) => PluginArgs::List,
+                Some(PluginSubcommand::Install { name }) => PluginArgs::Install { name },
+                Some(PluginSubcommand::Uninstall { name }) => PluginArgs::Uninstall { name },
+                Some(PluginSubcommand::Enable { name }) => PluginArgs::Enable { name },
+                Some(PluginSubcommand::Disable { name }) => PluginArgs::Disable { name },
+                Some(PluginSubcommand::Validate { path }) => PluginArgs::Validate { path },
+                Some(PluginSubcommand::Marketplace { action }) => {
+                    PluginArgs::Marketplace(match action {
+                        MarketplaceSubcommand::Add { source } => MarketplaceArgs::Add { source },
+                        MarketplaceSubcommand::List => MarketplaceArgs::List,
+                        MarketplaceSubcommand::Remove { name } => MarketplaceArgs::Remove { name },
+                        MarketplaceSubcommand::Update { name } => MarketplaceArgs::Update { name },
+                    })
+                }
+            }),
+            Some(CliCommand::Skills { subcommand }) => Command::Skills(match subcommand {
+                None | Some(SkillsSubcommand::List) => SkillsArgs::List,
+                Some(SkillsSubcommand::Show { name }) => SkillsArgs::Show { name },
+            }),
+            Some(CliCommand::Mcp { subcommand }) => Command::Mcp(match subcommand {
+                None | Some(McpSubcommand::List) => McpArgs::List,
+                Some(McpSubcommand::Connect { name, command }) => {
+                    McpArgs::Connect { name, command }
+                }
             }),
             Some(CliCommand::Doctor { fix, json }) => Command::Doctor(DoctorArgs { fix, json }),
             Some(CliCommand::Purge { dry_run, yes }) => Command::Purge(PurgeArgs { dry_run, yes }),
@@ -556,12 +787,13 @@ impl From<Cli> for CliArgs {
             command,
             model_path: cli.model_path,
             temperature: cli.temperature,
-            log_level: cli.log_level,
+            log_level,
             verbose: cli.verbose,
             quiet: cli.quiet,
             skip_permissions: cli.skip_permissions,
             r#continue: cli.r#continue,
             resume: cli.resume,
+            message,
         }
     }
 }

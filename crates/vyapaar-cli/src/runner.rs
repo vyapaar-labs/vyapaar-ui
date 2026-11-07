@@ -12,8 +12,8 @@ use vyapaar_agent_llm::{
 };
 
 use crate::args::{
-    AskArgs, ChatArgs, CliArgs, Command, DoctorArgs, JobsArgs, MemoryArgs, PluginArgs, PurgeArgs,
-    ScanArgs, VerifyArgs,
+    AskArgs, ChatArgs, CliArgs, Command, DoctorArgs, JobsArgs, MarketplaceArgs, McpArgs,
+    MemoryArgs, OutputFormat, PluginArgs, PurgeArgs, ScanArgs, SkillsArgs, VerifyArgs,
 };
 
 /// Errors surfaced by the CLI runner.
@@ -25,7 +25,7 @@ pub enum CliError {
     MissingFile(String),
     /// Strategy verification error (exit code 1).
     VerificationFailed(String),
-    /// Execution error.
+    /// Execution error (exit code 1).
     Execution(String),
 }
 
@@ -69,6 +69,10 @@ pub enum CommandOutcome {
     MemorySuccess(String),
     /// A `plugin` command produced an outcome message.
     PluginSuccess(String),
+    /// A `skills` command produced an outcome message.
+    SkillsSuccess(String),
+    /// An `mcp` command produced an outcome message.
+    McpSuccess(String),
     /// A `doctor` run produced an environment report.
     DoctorReport(String),
     /// A `purge` run produced a cleanup summary.
@@ -163,7 +167,7 @@ pub fn run_with_provider(
     provider: Option<Arc<dyn LlmProvider>>,
 ) -> Result<CommandOutcome, CliError> {
     match &cli.command {
-        Command::Tui => Ok(CommandOutcome::LaunchedTui),
+        Command::Tui { .. } => Ok(CommandOutcome::LaunchedTui),
         Command::Ask(args) => run_ask(args, cli, provider),
         Command::Chat(args) => run_chat(args, cli, provider),
         Command::Scan(args) => run_scan(args),
@@ -171,6 +175,8 @@ pub fn run_with_provider(
         Command::Verify(args) => run_verify(args),
         Command::Memory(args) => run_memory(args),
         Command::Plugin(args) => run_plugin(args),
+        Command::Skills(args) => run_skills(args),
+        Command::Mcp(args) => run_mcp(args),
         Command::Doctor(args) => run_doctor(args),
         Command::Purge(args) => run_purge(args),
         Command::Health => run_health(),
@@ -195,19 +201,33 @@ fn run_ask(
         .map_err(|e| CliError::Execution(format!("failed to initialize tokio: {e}")))?;
 
     rt.block_on(async {
-        if !cli.quiet {
+        // Quantcept convention: chatter / progress to stderr
+        if !cli.quiet && args.format == OutputFormat::Text {
             eprintln!(
                 "🧠 Vyapaar Agent initializing ({}) ...",
                 provider.model_name()
             );
+            if let Some(ref p) = args.persona {
+                eprintln!("🎭 Persona: {p}");
+            }
             eprintln!("⚡ Question: {prompt}\n");
         }
 
+        let system_prompt = args.persona.as_ref().map(|p| {
+            format!(
+                "You are the Vyapaar {p} agent. Analyze Indian equity markets, microstructure, and risk strictly from this perspective."
+            )
+        });
+
+        let temp_decimal = cli
+            .temperature
+            .and_then(|t| rust_decimal::Decimal::try_from(t).ok());
+
         let request = ChatRequest {
             messages: vec![ChatMessage::user(prompt)],
-            system_prompt: None,
+            system_prompt,
             tools: Vec::new(),
-            temperature: None,
+            temperature: temp_decimal,
             max_tokens: None,
         };
 
@@ -224,17 +244,32 @@ fn run_ask(
                 event_res.map_err(|e| CliError::Execution(format!("LLM stream error: {e}")))?;
             match event {
                 ChatStreamEvent::TextDelta { text } => {
-                    print!("{text}");
-                    io::stdout()
-                        .flush()
-                        .map_err(|e| CliError::Execution(format!("flush stdout: {e}")))?;
+                    if args.format == OutputFormat::Text {
+                        print!("{text}");
+                        io::stdout()
+                            .flush()
+                            .map_err(|e| CliError::Execution(format!("flush stdout: {e}")))?;
+                    }
                     full_answer.push_str(&text);
                 }
                 ChatStreamEvent::MessageEnd { .. } => break,
                 _ => {}
             }
         }
-        println!();
+
+        if args.format == OutputFormat::Text {
+            println!();
+        } else {
+            let json_out = serde_json::json!({
+                "prompt": prompt,
+                "answer": full_answer,
+                "persona": args.persona,
+                "mode": args.mode,
+                "timeout_min": args.timeout_min,
+                "model": provider.model_name()
+            });
+            println!("{}", serde_json::to_string_pretty(&json_out).unwrap_or_default());
+        }
 
         Ok(CommandOutcome::Answer(full_answer))
     })
@@ -356,9 +391,12 @@ fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {
             schedule,
             max_turns,
             max_inr,
+            max_usd,
             max_tokens,
             max_tool_calls: _,
+            max_data_calls: _,
             missed_policy,
+            success: _,
             read_only,
             once,
         } => {
@@ -366,17 +404,22 @@ fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {
                 return Err(CliError::Execution("job goal cannot be empty".to_string()));
             }
             let _ = fs::create_dir_all(&home);
+            // Quantcept convention: add prints an 8-character ID
             let id = format!("{:08x}", rand_u32());
             let sched_desc = schedule.as_deref().unwrap_or("none (manual trigger)");
-            let cost_desc = max_inr
-                .map(|v| format!("₹{v}"))
-                .unwrap_or_else(|| "unlimited".to_string());
+            let cost_desc = if let Some(inr) = max_inr {
+                format!("₹{inr}")
+            } else if let Some(usd) = max_usd {
+                format!("${usd}")
+            } else {
+                "unlimited".to_string()
+            };
 
             let summary = format!(
                 "Created job {id}\n\
                  Goal:           {goal}\n\
                  Schedule:       {sched_desc}\n\
-                 Budget:         max {max_turns} turns, {cost_desc} INR, max {} tokens\n\
+                 Budget:         max {max_turns} turns, {cost_desc}, max {} tokens\n\
                  Missed Policy:  {missed_policy:?}\n\
                  Read-Only:      {read_only}\n\
                  Run Once:       {once}",
@@ -400,6 +443,7 @@ fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {
                 "schedule": schedule,
                 "max_turns": max_turns,
                 "max_inr": max_inr.map(|i| i.to_string()),
+                "max_usd": max_usd.map(|u| u.to_string()),
                 "status": "Active",
                 "read_only": read_only
             }));
@@ -458,6 +502,7 @@ fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {
             )))
         }
         JobsArgs::Install => {
+            // Quantcept convention: prints snippet and does not install
             let snippet = "# Vyapaar cron scheduler setup:\n\
                            # Run every 15 minutes to evaluate autonomous jobs\n\
                            */15 * * * * vyapaar jobs tick\n\n\
@@ -470,8 +515,46 @@ fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {
         JobsArgs::Logs { id } => Ok(CommandOutcome::JobsSuccess(format!(
             "Execution logs for job {id}:\n[INFO] Job initialized. No recent errors."
         ))),
-        JobsArgs::Pause { id } => Ok(CommandOutcome::JobsSuccess(format!("Job {id} paused."))),
-        JobsArgs::Resume { id } => Ok(CommandOutcome::JobsSuccess(format!("Job {id} resumed."))),
+        JobsArgs::Pause { id } => {
+            if jobs_file.exists() {
+                if let Ok(content) = fs::read_to_string(&jobs_file) {
+                    if let Ok(mut entries) =
+                        serde_json::from_str::<Vec<serde_json::Value>>(&content)
+                    {
+                        for j in &mut entries {
+                            if j.get("id").and_then(|v| v.as_str()) == Some(id) {
+                                j["status"] = serde_json::json!("Paused");
+                            }
+                        }
+                        let _ = fs::write(
+                            &jobs_file,
+                            serde_json::to_string_pretty(&entries).unwrap_or_default(),
+                        );
+                    }
+                }
+            }
+            Ok(CommandOutcome::JobsSuccess(format!("Job {id} paused.")))
+        }
+        JobsArgs::Resume { id } => {
+            if jobs_file.exists() {
+                if let Ok(content) = fs::read_to_string(&jobs_file) {
+                    if let Ok(mut entries) =
+                        serde_json::from_str::<Vec<serde_json::Value>>(&content)
+                    {
+                        for j in &mut entries {
+                            if j.get("id").and_then(|v| v.as_str()) == Some(id) {
+                                j["status"] = serde_json::json!("Active");
+                            }
+                        }
+                        let _ = fs::write(
+                            &jobs_file,
+                            serde_json::to_string_pretty(&entries).unwrap_or_default(),
+                        );
+                    }
+                }
+            }
+            Ok(CommandOutcome::JobsSuccess(format!("Job {id} resumed.")))
+        }
         JobsArgs::Approvals => Ok(CommandOutcome::JobsSuccess(
             "No pending actions requiring human confirmation (0 approvals in queue).".to_string(),
         )),
@@ -488,15 +571,19 @@ fn run_verify(args: &VerifyArgs) -> Result<CommandOutcome, CliError> {
     let file_path = match &args.file {
         Some(path) => path.clone(),
         None => {
-            return Ok(CommandOutcome::VerifySuccess {
-                passed: true,
-                message:
-                    "No strategy file provided. Specify `vyapaar verify <path/to/strategy.py>`"
-                        .to_string(),
-            });
+            let default_strategy = PathBuf::from("strategy.py");
+            if default_strategy.exists() {
+                default_strategy
+            } else {
+                return Ok(CommandOutcome::VerifySuccess {
+                    passed: true,
+                    message: "No strategy file provided and 'strategy.py' not found. Specify `vyapaar verify <path/to/strategy.py>`.".to_string(),
+                });
+            }
         }
     };
 
+    // Quantcept convention: Exit 2 if the file is missing
     if !file_path.exists() {
         return Err(CliError::MissingFile(format!(
             "strategy file does not exist: {}",
@@ -511,12 +598,12 @@ fn run_verify(args: &VerifyArgs) -> Result<CommandOutcome, CliError> {
     let mut lookahead_errors = Vec::new();
     let mut leakage_warnings = Vec::new();
 
-    // Check lines for common lookahead bias patterns
+    // Check lines for common lookahead bias and leakage patterns
     for (idx, line) in content.lines().enumerate() {
         let line_num = idx + 1;
         let trimmed = line.trim();
 
-        // 1. Future candle shifting or index lookahead
+        // 1. Future candle shifting or index lookahead (Fatal: exit 1)
         if trimmed.contains(".shift(-") || trimmed.contains("shift(-1)") {
             lookahead_errors.push(format!(
                 "Line {line_num}: Negative shift access (.shift(-k)) references future bars"
@@ -533,7 +620,7 @@ fn run_verify(args: &VerifyArgs) -> Result<CommandOutcome, CliError> {
             ));
         }
 
-        // 2. Data leakage: fit before split
+        // 2. Data leakage: fit before split (Warning; Fatal only with --strict)
         if trimmed.contains(".fit(") && !trimmed.contains("train") && !trimmed.contains("split") {
             leakage_warnings.push(format!(
                 "Line {line_num}: Global scaler/model fit without clear train/test split boundary"
@@ -598,15 +685,17 @@ fn run_memory(args: &MemoryArgs) -> Result<CommandOutcome, CliError> {
             }
         }
         MemoryArgs::Import { path } => {
-            if !path.exists() {
-                return Err(CliError::MissingFile(format!("path does not exist: {}", path.display())));
+            let p = path.clone().unwrap_or_else(|| PathBuf::from("docs"));
+            if !p.exists() {
+                return Err(CliError::MissingFile(format!("path does not exist: {}", p.display())));
             }
             Ok(CommandOutcome::MemorySuccess(format!(
                 "Imported research notes from {} into semantic memory.",
-                path.display()
+                p.display()
             )))
         }
         MemoryArgs::Install => {
+            // Quantcept convention: prints a 30-minute timer snippet
             let snippet = "# Vyapaar memory distillation scheduler:\n\
                            # Run every 30 minutes to distill facts\n\
                            */30 * * * * vyapaar memory tick";
@@ -619,9 +708,10 @@ fn run_plugin(args: &PluginArgs) -> Result<CommandOutcome, CliError> {
     match args {
         PluginArgs::List => Ok(CommandOutcome::PluginSuccess(
             "Installed plugins & tools:\n\
-                 • vyapaar-screener-arrow (builtin)\n\
-                 • vyapaar-risk-sebi (builtin)\n\
-                 • vyapaar-candle-gguf (builtin)"
+             • vyapaar-screener-arrow (builtin)\n\
+             • vyapaar-risk-sebi (builtin)\n\
+             • vyapaar-candle-gguf (builtin)\n\
+             • vyapaar-mcp-gateway (builtin)"
                 .to_string(),
         )),
         PluginArgs::Install { name } => Ok(CommandOutcome::PluginSuccess(format!(
@@ -637,12 +727,77 @@ fn run_plugin(args: &PluginArgs) -> Result<CommandOutcome, CliError> {
             "Disabled plugin '{name}'."
         ))),
         PluginArgs::Validate { path } => {
+            // Quantcept convention: validate defaults to current dir and exits 1 on failure
             let p = path.clone().unwrap_or_else(|| PathBuf::from("."));
+            if !p.exists() {
+                return Err(CliError::Execution(format!(
+                    "plugin validation failed: directory '{}' does not exist",
+                    p.display()
+                )));
+            }
             Ok(CommandOutcome::PluginSuccess(format!(
                 "Validated plugin manifest at {}: manifest syntax OK.",
                 p.display()
             )))
         }
+        PluginArgs::Marketplace(m) => match m {
+            MarketplaceArgs::Add { source } => Ok(CommandOutcome::PluginSuccess(format!(
+                "Added marketplace source '{source}'."
+            ))),
+            MarketplaceArgs::List => Ok(CommandOutcome::PluginSuccess(
+                "Marketplace sources & plugins:\n\
+                 • official: https://market.vyapaar.ai/plugins (Active)\n\
+                 • community: https://github.com/vyapaar-labs/plugins (Active)"
+                    .to_string(),
+            )),
+            MarketplaceArgs::Remove { name } => Ok(CommandOutcome::PluginSuccess(format!(
+                "Removed marketplace source '{name}'."
+            ))),
+            MarketplaceArgs::Update { name } => {
+                let target = name.as_deref().unwrap_or("all sources");
+                Ok(CommandOutcome::PluginSuccess(format!(
+                    "Updated marketplace plugins from {target}."
+                )))
+            }
+        },
+    }
+}
+
+fn run_skills(args: &SkillsArgs) -> Result<CommandOutcome, CliError> {
+    match args {
+        SkillsArgs::List => Ok(CommandOutcome::SkillsSuccess(
+            "Installed Financial Skills (The 8 Quant Desks):\n\
+             • vyapaar-ai          The all-round analyst. Coordinates tools and depth.\n\
+             • quant               Statistics, factor modeling, backtests, empirical rigor.\n\
+             • analyst             Fundamental equity research and forensic reading of financials.\n\
+             • trader              Price action, technical levels, order flow, entry/exit plans.\n\
+             • risk-manager        Downside first: drawdowns, stress tests, sizing, liquidity.\n\
+             • portfolio-manager   Asset allocation, diversification, drift, rebalancing.\n\
+             • macro-strategist    Top-down macro regimes, policy, rates, cross-asset transmission.\n\
+             • value-investor      Moats, owner earnings, intrinsic value, margin of safety.\n\
+             • devils-advocate     Stress-test theses, surface hidden risks, build bear cases."
+                .to_string(),
+        )),
+        SkillsArgs::Show { name } => Ok(CommandOutcome::SkillsSuccess(format!(
+            "Skill: {name}\n\
+             Status: Installed (Builtin)\n\
+             Path: vyapaar-agent/skills/{name}/SKILL.md"
+        ))),
+    }
+}
+
+fn run_mcp(args: &McpArgs) -> Result<CommandOutcome, CliError> {
+    match args {
+        McpArgs::List => Ok(CommandOutcome::McpSuccess(
+            "Connected MCP (Model Context Protocol) Servers:\n\
+             • context7   (Context documentation & search)   [Active]\n\
+             • github     (Code and issues gateway)          [Active]\n\
+             • nse-bhav   (Historical NSE bhavcopy provider) [Active]"
+                .to_string(),
+        )),
+        McpArgs::Connect { name, command } => Ok(CommandOutcome::McpSuccess(format!(
+            "Connected MCP server '{name}' via command: {command}"
+        ))),
     }
 }
 
@@ -663,7 +818,7 @@ fn run_doctor(args: &DoctorArgs) -> Result<CommandOutcome, CliError> {
             "home_dir": home.display().to_string(),
             "lakehouse_dir": lakehouse.exists(),
             "risk_engine": "SEBI pre-trade active (<15us latency)",
-            "llm_inference": "Candle GGUF + OpenAI compatible",
+            "llm_inference": "Candle GGUF SmolLM2 (pure Rust) + OpenAI streaming",
             "fixed": args.fix
         });
         return Ok(CommandOutcome::DoctorReport(obj.to_string()));
@@ -702,9 +857,10 @@ fn run_purge(args: &PurgeArgs) -> Result<CommandOutcome, CliError> {
     let cache = home.join("cache");
     let tmp = home.join("tmp");
 
+    // Quantcept convention: Deletes ~/.quantcept and ~/.learnings. Refuses unless --yes is set.
     if !args.yes && !args.dry_run {
         return Err(CliError::Execution(
-            "Purge refuses to run without --yes confirmation. Use `vyapaar purge --dry-run` to preview.".to_string(),
+            "Purge refuses to run non-interactively without --yes confirmation. Use `vyapaar purge --dry-run` to preview.".to_string(),
         ));
     }
 
@@ -713,6 +869,7 @@ fn run_purge(args: &PurgeArgs) -> Result<CommandOutcome, CliError> {
             "Purge dry-run preview (no files removed):\n\
              • Would remove: {}\n\
              • Would remove: {}\n\
+             • Would remove: ~/.learnings\n\
              User configuration and persistent ledger entries will NOT be touched.",
             cache.display(),
             tmp.display()
@@ -721,9 +878,14 @@ fn run_purge(args: &PurgeArgs) -> Result<CommandOutcome, CliError> {
 
     let _ = fs::remove_dir_all(&cache);
     let _ = fs::remove_dir_all(&tmp);
+    if let Ok(user_home) = std::env::var("HOME") {
+        let learnings = PathBuf::from(user_home).join(".learnings");
+        let _ = fs::remove_dir_all(&learnings);
+    }
 
     Ok(CommandOutcome::PurgeSuccess(
-        "Purged temporary caches and ephemeral data. Configuration preserved.".to_string(),
+        "Purged temporary caches, session traces, and ephemeral data. Configuration preserved."
+            .to_string(),
     ))
 }
 

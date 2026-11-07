@@ -134,7 +134,7 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
         Span::raw(" | Indian Equities Quantitative Workstation "),
         mode_str,
         Span::styled(
-            format!(" | LLM: {}", app.model_name),
+            format!(" | Persona: {}", app.model_name),
             Style::default().fg(Color::Green),
         ),
     ]);
@@ -252,7 +252,7 @@ fn draw_agent_chat(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let input_title = if app.is_input_mode {
         " Prompt (Enter: Send, Esc: Normal mode, '/' or Ctrl+P: Palette) "
     } else {
-        " Prompt (Press 'i' or Enter to type, Ctrl+P: Palette) "
+        " Prompt (Press 'i' or Enter to type, '/' or Ctrl+P: Palette) "
     };
 
     let input_block = Block::default()
@@ -281,8 +281,8 @@ fn draw_agent_chat(frame: &mut Frame, area: Rect, app: &TuiApp) {
 }
 
 fn draw_palette(frame: &mut Frame, area: Rect, app: &TuiApp) {
-    let popup_width = 64.min(area.width.saturating_sub(4));
-    let popup_height = 16.min(area.height.saturating_sub(4));
+    let popup_width = 72.min(area.width.saturating_sub(4));
+    let popup_height = 18.min(area.height.saturating_sub(4));
 
     let x = (area.width.saturating_sub(popup_width)) / 2;
     let y = (area.height.saturating_sub(popup_height)) / 2;
@@ -293,7 +293,7 @@ fn draw_palette(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(" Command Palette (Up/Down: Navigate, Enter: Run, Esc: Close) ");
+        .title(" Command Palette ([Enter] Run  [Tab] Complete  [Esc] Dismiss  [Up/Down] Move) ");
 
     let filtered = app.filtered_palette();
     let mut items = Vec::new();
@@ -308,7 +308,7 @@ fn draw_palette(frame: &mut Frame, area: Rect, app: &TuiApp) {
     ));
 
     if filtered.is_empty() {
-        items.push(Line::from("  No matching slash commands."));
+        items.push(Line::from("  No matching slash commands found."));
     } else {
         for (idx, (cmd, desc)) in filtered.iter().enumerate() {
             let is_sel = idx == app.palette_selected;
@@ -323,7 +323,7 @@ fn draw_palette(frame: &mut Frame, area: Rect, app: &TuiApp) {
 
             let prefix = if is_sel { "▶ " } else { "  " };
             items.push(Line::from(vec![
-                Span::styled(format!("{prefix}{:<13} ", cmd), style),
+                Span::styled(format!("{prefix}{:<15} ", cmd), style),
                 Span::styled(
                     *desc,
                     if is_sel {
@@ -444,7 +444,7 @@ fn draw_placeholder(frame: &mut Frame, area: Rect, title: &str, description: &st
         )]),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "  Tip: Switch to the Agent tab (press '7' or Tab) to chat, or Ctrl+P for slash commands.",
+            "  Tip: Switch to the Agent tab (press '7' or Tab) to chat, or press '/' / Ctrl+P for slash commands.",
             Style::default().fg(Color::DarkGray),
         )]),
     ];
@@ -457,7 +457,7 @@ fn draw_footer(frame: &mut Frame, area: Rect, _app: &TuiApp) {
     let footer_text = Line::from(vec![
         Span::styled(" [Tab / 1-7] ", Style::default().fg(Color::Yellow)),
         Span::raw("Tabs | "),
-        Span::styled("[Ctrl+P] ", Style::default().fg(Color::Magenta)),
+        Span::styled("[/ or Ctrl+P] ", Style::default().fg(Color::Magenta)),
         Span::raw("Palette | "),
         Span::styled("[i / Enter] ", Style::default().fg(Color::Yellow)),
         Span::raw("Chat Input | "),

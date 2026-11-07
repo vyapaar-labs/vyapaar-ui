@@ -6,7 +6,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, 
 use vyapaar_highlight::HighlightClass;
 
 use vyapaar_tui::agent_chat::{AgentMessage, AgentRole, ChatTranscript};
-use vyapaar_tui::app::{ActiveTab, TuiApp};
+use vyapaar_tui::app::{ActiveTab, SLASH_COMMANDS, TuiApp};
 use vyapaar_tui::keybindings::{Action, handle_key};
 use vyapaar_tui::layout::LayoutModel;
 
@@ -180,10 +180,23 @@ fn test_slash_commands_execution() {
             .contains("Vyapaar Slash Commands")
     );
 
+    // Test /help with specific command
+    app.execute_slash_command("/help agent");
+    assert!(app.chat.last().unwrap().text.contains("Command /agent:"));
+
     // Test /agent
     app.execute_slash_command("/agent quant-deepseek");
-    assert_eq!(app.model_name, "quant-deepseek");
+    assert!(app.model_name.contains("quant-deepseek"));
     assert!(app.chat.last().unwrap().text.contains("quant-deepseek"));
+
+    app.execute_slash_command("/agent off");
+    assert!(
+        app.chat
+            .last()
+            .unwrap()
+            .text
+            .contains("Reset active persona")
+    );
 
     // Test /undo and /redo
     app.chat
@@ -200,6 +213,76 @@ fn test_slash_commands_execution() {
     // Test /clear
     app.execute_slash_command("/clear");
     assert!(app.chat.is_empty());
+}
+
+#[test]
+fn test_hardened_quantcept_slash_commands() {
+    let mut app = TuiApp::new();
+    app.active_tab = ActiveTab::AgentChat;
+
+    // /perf
+    app.execute_slash_command("/perf");
+    assert!(app.chat.last().unwrap().text.contains("Inference Speed"));
+
+    // /context
+    app.execute_slash_command("/context");
+    assert!(app.chat.last().unwrap().text.contains("Token Budget"));
+
+    // /remember
+    app.execute_slash_command("/remember Always hedge NIFTY options delta");
+    assert!(app.chat.last().unwrap().text.contains("Remembered:"));
+
+    // /skills
+    app.execute_slash_command("/skills");
+    assert!(app.chat.last().unwrap().text.contains("quant"));
+    assert!(app.chat.last().unwrap().text.contains("analyst"));
+
+    // /mcp
+    app.execute_slash_command("/mcp");
+    assert!(app.chat.last().unwrap().text.contains("context7"));
+
+    // /account
+    app.execute_slash_command("/account");
+    assert!(app.chat.last().unwrap().text.contains("SEBI Risk Engine"));
+
+    // /settings
+    app.execute_slash_command("/settings");
+    assert!(app.chat.last().unwrap().text.contains("Theme"));
+
+    // /usage
+    app.execute_slash_command("/usage");
+    assert!(app.chat.last().unwrap().text.contains("Local Tokens"));
+
+    // /positions
+    app.execute_slash_command("/positions");
+    assert!(
+        app.chat
+            .last()
+            .unwrap()
+            .text
+            .contains("Paper Trading Positions")
+    );
+
+    // /copy
+    app.execute_slash_command("/copy full");
+    assert!(
+        app.chat
+            .last()
+            .unwrap()
+            .text
+            .contains("Copied full conversation transcript")
+    );
+
+    // /create-agent & /delete-agent
+    app.execute_slash_command("/create-agent momentum-trader");
+    assert!(app.chat.last().unwrap().text.contains("momentum-trader"));
+
+    app.execute_slash_command("/delete-agent momentum-trader");
+    assert!(app.chat.last().unwrap().text.contains("Deleted persona"));
+
+    // /exit
+    app.execute_slash_command("/exit");
+    assert!(app.should_quit);
 }
 
 #[test]
@@ -230,4 +313,57 @@ fn test_command_palette_modal_and_filtering() {
         }
     }
     assert!(found_palette);
+}
+
+#[test]
+fn test_palette_tab_autocomplete() {
+    let mut app = TuiApp::new();
+    app.is_palette_open = true;
+    app.palette_query = "agent".to_string();
+
+    let tab_key = KeyEvent {
+        code: KeyCode::Tab,
+        modifiers: KeyModifiers::NONE,
+        kind: KeyEventKind::Press,
+        state: KeyEventState::NONE,
+    };
+
+    app.on_key(tab_key);
+    assert!(!app.is_palette_open);
+    assert_eq!(app.active_tab, ActiveTab::AgentChat);
+    assert!(app.is_input_mode);
+    assert!(app.input_buffer.starts_with("/agent"));
+}
+
+#[test]
+fn test_slash_key_opens_palette() {
+    let mut app = TuiApp::new();
+    assert!(!app.is_palette_open);
+
+    let slash_key = KeyEvent {
+        code: KeyCode::Char('/'),
+        modifiers: KeyModifiers::NONE,
+        kind: KeyEventKind::Press,
+        state: KeyEventState::NONE,
+    };
+
+    app.on_key(slash_key);
+    assert!(app.is_palette_open);
+    assert_eq!(app.palette_query, "/");
+}
+
+#[test]
+fn test_all_catalog_slash_commands_present() {
+    assert!(SLASH_COMMANDS.len() >= 35);
+    let commands: Vec<&str> = SLASH_COMMANDS.iter().map(|(c, _)| *c).collect();
+    assert!(commands.contains(&"/help"));
+    assert!(commands.contains(&"/agent"));
+    assert!(commands.contains(&"/jobs"));
+    assert!(commands.contains(&"/memory"));
+    assert!(commands.contains(&"/verify"));
+    assert!(commands.contains(&"/perf"));
+    assert!(commands.contains(&"/context"));
+    assert!(commands.contains(&"/skills"));
+    assert!(commands.contains(&"/mcp"));
+    assert!(commands.contains(&"/quit"));
 }

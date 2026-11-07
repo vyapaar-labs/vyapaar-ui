@@ -7,7 +7,7 @@ use std::sync::Arc;
 use vyapaar_agent_llm::{CandleGgufConfig, CandleGgufProvider};
 use vyapaar_cli::args::parse;
 use vyapaar_cli::runner::{CliError, CommandOutcome, resolve_provider, run};
-use vyapaar_tui::TuiApp;
+use vyapaar_tui::{ActiveTab, TuiApp};
 
 fn main() -> ExitCode {
     let cli = parse();
@@ -27,7 +27,16 @@ fn main() -> ExitCode {
                             Arc::new(CandleGgufProvider::new(CandleGgufConfig::default()))
                         });
 
-                    let app = TuiApp::new().with_model_name(provider.model_name());
+                    let mut app = TuiApp::new().with_model_name(provider.model_name());
+                    if cli.skip_permissions {
+                        app.auto_approve = true;
+                    }
+                    if let Some(ref msg) = cli.message {
+                        app.active_tab = ActiveTab::AgentChat;
+                        app.pending_prompt = Some(msg.clone());
+                        app.is_loading = true;
+                    }
+
                     let rt = tokio::runtime::Runtime::new().expect("failed to start tokio runtime");
 
                     if let Err(e) = rt.block_on(vyapaar_tui::run_terminal(app, provider)) {
@@ -48,6 +57,8 @@ fn main() -> ExitCode {
                 CommandOutcome::VerifySuccess { message, .. } => println!("{message}"),
                 CommandOutcome::MemorySuccess(msg) => println!("{msg}"),
                 CommandOutcome::PluginSuccess(msg) => println!("{msg}"),
+                CommandOutcome::SkillsSuccess(msg) => println!("{msg}"),
+                CommandOutcome::McpSuccess(msg) => println!("{msg}"),
                 CommandOutcome::DoctorReport(report) => println!("{report}"),
                 CommandOutcome::PurgeSuccess(msg) => println!("{msg}"),
                 CommandOutcome::HealthReport(report) => println!("{report}"),
