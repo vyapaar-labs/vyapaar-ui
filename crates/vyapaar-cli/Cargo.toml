@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Vyapaar developer CLI: tui, ask, scan, health subcommands"
+description = "Vyapaar developer CLI: tui, ask, chat, scan, health subcommands"
 
 [lib]
 name = "vyapaar_cli"
@@ -19,6 +19,12 @@ vyapaar-core.workspace = true
 vyapaar-ui-core.workspace = true
 vyapaar-tui.workspace = true
 vyapaar-highlight.workspace = true
+vyapaar-agent-core.workspace = true
+vyapaar-agent-chat.workspace = true
+vyapaar-agent-llm.workspace = true
+tokio = { workspace = true, features = ["full"] }
+futures.workspace = true
+rust_decimal.workspace = true
 clap.workspace = true
 serde.workspace = true
 thiserror.workspace = true

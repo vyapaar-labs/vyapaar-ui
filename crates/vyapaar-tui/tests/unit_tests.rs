@@ -138,3 +138,28 @@ fn agent_message_highlight_uses_markdown() {
     let spans = msg.highlight();
     assert!(spans.iter().any(|s| s.class == HighlightClass::Keyword));
 }
+
+#[test]
+fn test_draw_agent_chat_with_messages() {
+    let backend = TestBackend::new(80, 24);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = TuiApp::new();
+    app.active_tab = ActiveTab::AgentChat;
+    app.chat.push(AgentMessage::new(AgentRole::User, "Hello agent"));
+    app.chat.push(AgentMessage::new(AgentRole::Agent, "Hello trader! How can I help you?"));
+    terminal.draw(|frame| vyapaar_tui::ui::draw(frame, &app)).unwrap();
+    let mut found_user = false;
+    let mut found_agent = false;
+    for y in 0..24 {
+        let mut row = String::new();
+        for x in 0..80 {
+            row.push_str(terminal.backend().buffer()[(x, y)].symbol());
+        }
+        if row.contains("Hello agent") { found_user = true; }
+        if row.contains("Hello trader!") { found_agent = true; }
+        println!("ROW {:2}: {}", y, row);
+    }
+    assert!(found_user);
+    assert!(found_agent);
+}
+

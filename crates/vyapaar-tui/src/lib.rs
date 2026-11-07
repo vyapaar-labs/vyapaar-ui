@@ -24,8 +24,12 @@ pub mod agent_chat;
 pub mod app;
 pub mod keybindings;
 pub mod layout;
+pub mod terminal;
+pub mod ui;
 
 pub use agent_chat::{AgentMessage, AgentRole, ChatTranscript};
 pub use app::{ActiveTab, TuiApp};
 pub use keybindings::{Action, KeyBinding, handle_key};
 pub use layout::LayoutModel;
+pub use terminal::{AgentStreamUpdate, run_terminal};
+pub use ui::draw;

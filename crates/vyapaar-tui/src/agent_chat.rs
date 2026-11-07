@@ -73,6 +73,11 @@ impl ChatTranscript {
     pub fn last(&self) -> Option<&AgentMessage> {
         self.messages.last()
     }
+
+    /// The last message as mutable, if any.
+    pub fn last_mut(&mut self) -> Option<&mut AgentMessage> {
+        self.messages.last_mut()
+    }
 }
 
 impl Default for ChatTranscript {
