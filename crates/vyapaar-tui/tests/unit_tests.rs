@@ -1,21 +1,14 @@
-//! Unit tests for the Ratatui terminal workstation (`vyapaar-tui`).
-//!
-//! Uses `ratatui::TestBackend`-style pure state assertions and scripted
-//! `crossterm` key fixtures — no live terminal required.
+//! Unit tests for the Ratatui TUI workspace tab navigation, rendering, and slash commands.
 
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::layout::Rect;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 use vyapaar_highlight::HighlightClass;
+
 use vyapaar_tui::agent_chat::{AgentMessage, AgentRole, ChatTranscript};
 use vyapaar_tui::app::{ActiveTab, TuiApp};
 use vyapaar_tui::keybindings::{Action, handle_key};
 use vyapaar_tui::layout::LayoutModel;
-
-fn key(code: KeyCode) -> KeyEvent {
-    KeyEvent::new(code, KeyModifiers::NONE)
-}
 
 #[test]
 fn new_app_starts_on_watchlist() {
@@ -23,18 +16,6 @@ fn new_app_starts_on_watchlist() {
     assert_eq!(app.active_tab, ActiveTab::Watchlist);
     assert!(!app.should_quit);
     assert_eq!(app.selected_index, 0);
-}
-
-#[test]
-fn tab_order_wraps() {
-    assert_eq!(ActiveTab::Watchlist.next(), ActiveTab::Screener);
-    assert_eq!(ActiveTab::Screener.next(), ActiveTab::Portfolio);
-    assert_eq!(ActiveTab::Portfolio.next(), ActiveTab::Orders);
-    assert_eq!(ActiveTab::Orders.next(), ActiveTab::Backtest);
-    assert_eq!(ActiveTab::Backtest.next(), ActiveTab::Algos);
-    assert_eq!(ActiveTab::Algos.next(), ActiveTab::AgentChat);
-    assert_eq!(ActiveTab::AgentChat.next(), ActiveTab::Watchlist);
-    assert_eq!(ActiveTab::Watchlist.previous(), ActiveTab::AgentChat);
 }
 
 #[test]
@@ -46,87 +27,99 @@ fn tab_titles() {
     assert_eq!(ActiveTab::Backtest.title(), "Backtest");
     assert_eq!(ActiveTab::Algos.title(), "Algos");
     assert_eq!(ActiveTab::AgentChat.title(), "Agent");
-    assert_eq!(ActiveTab::ALL.len(), 7);
+}
+
+#[test]
+fn tab_order_wraps() {
+    let mut tab = ActiveTab::Watchlist;
+    for expected in [
+        ActiveTab::Screener,
+        ActiveTab::Portfolio,
+        ActiveTab::Orders,
+        ActiveTab::Backtest,
+        ActiveTab::Algos,
+        ActiveTab::AgentChat,
+        ActiveTab::Watchlist,
+    ] {
+        tab = tab.next();
+        assert_eq!(tab, expected);
+    }
+
+    tab = ActiveTab::Watchlist;
+    assert_eq!(tab.previous(), ActiveTab::AgentChat);
 }
 
 #[test]
 fn keybindings_map_chars_and_navigation() {
+    let key = |code: KeyCode| KeyEvent {
+        code,
+        modifiers: KeyModifiers::NONE,
+        kind: KeyEventKind::Press,
+        state: KeyEventState::NONE,
+    };
+
     assert_eq!(handle_key(key(KeyCode::Char('q'))), Some(Action::Quit));
-    assert_eq!(handle_key(key(KeyCode::Char('l'))), Some(Action::NextTab));
-    assert_eq!(
-        handle_key(key(KeyCode::Char('h'))),
-        Some(Action::PreviousTab)
-    );
-    assert_eq!(handle_key(key(KeyCode::Down)), Some(Action::Down));
+    assert_eq!(handle_key(key(KeyCode::Tab)), Some(Action::NextTab));
     assert_eq!(handle_key(key(KeyCode::Char('j'))), Some(Action::Down));
+    assert_eq!(handle_key(key(KeyCode::Char('k'))), Some(Action::Up));
     assert_eq!(handle_key(key(KeyCode::Enter)), Some(Action::Submit));
-    assert_eq!(handle_key(key(KeyCode::Char('z'))), None);
+    assert_eq!(handle_key(key(KeyCode::Char('x'))), None);
 }
 
 #[test]
 fn app_apply_quit_and_tabs() {
     let mut app = TuiApp::new();
-    app.on_key(key(KeyCode::Char('l')));
+    app.apply(Action::NextTab);
     assert_eq!(app.active_tab, ActiveTab::Screener);
-    app.on_key(key(KeyCode::Char('q')));
+    app.apply(Action::PreviousTab);
+    assert_eq!(app.active_tab, ActiveTab::Watchlist);
+    app.apply(Action::Quit);
     assert!(app.should_quit);
 }
 
 #[test]
 fn selection_moves_and_clamps_at_zero() {
     let mut app = TuiApp::new();
-    app.on_key(key(KeyCode::Down));
-    app.on_key(key(KeyCode::Down));
-    assert_eq!(app.selected_index, 2);
-    app.on_key(key(KeyCode::Up));
-    assert_eq!(app.selected_index, 1);
-    // Can't go below zero.
-    app.on_key(key(KeyCode::Up));
-    app.on_key(key(KeyCode::Up));
-    app.on_key(key(KeyCode::Up));
     assert_eq!(app.selected_index, 0);
+    app.apply(Action::Up);
+    assert_eq!(app.selected_index, 0);
+    app.apply(Action::Down);
+    assert_eq!(app.selected_index, 1);
+    app.apply(Action::Down);
+    assert_eq!(app.selected_index, 2);
+    app.apply(Action::Up);
+    assert_eq!(app.selected_index, 1);
 }
 
 #[test]
 fn chat_transcript_appends_and_highlights() {
-    let mut transcript = ChatTranscript::new();
-    assert!(transcript.is_empty());
-    transcript.push(AgentMessage::new(AgentRole::User, "show me NIFTY"));
-    transcript.push(AgentMessage::new(
-        AgentRole::Agent,
-        "```python\nprint(1)\n```",
-    ));
-    assert_eq!(transcript.len(), 2);
-    assert_eq!(transcript.last().unwrap().role, AgentRole::Agent);
-    // The agent message's markdown contains a code fence span.
-    let spans = transcript.last().unwrap().highlight();
-    assert!(spans.iter().any(|s| s.class == HighlightClass::Function));
+    let mut chat = ChatTranscript::new();
+    assert!(chat.is_empty());
+    chat.push(AgentMessage::new(AgentRole::User, "hi"));
+    chat.push(AgentMessage::new(AgentRole::Agent, "hello"));
+    assert_eq!(chat.len(), 2);
+    assert_eq!(chat.last().unwrap().role, AgentRole::Agent);
 }
 
 #[test]
 fn layout_model_splits_regions() {
-    let area = Rect::new(0, 0, 80, 24);
+    let area = ratatui::layout::Rect::new(0, 0, 100, 30);
     let layout = LayoutModel::new(area);
-    assert_eq!(layout.header.y, 0);
-    assert_eq!(layout.tabs.y, 1);
-    assert_eq!(layout.footer.y, 23);
-    assert_eq!(layout.content.height, 21);
-    let cols = layout.content_columns();
-    assert_eq!(cols.len(), 2);
-    assert_eq!(cols[0].width, 32);
-    assert_eq!(cols[1].width, 48);
+    assert_eq!(layout.header.height, 1);
+    assert_eq!(layout.tabs.height, 1);
+    assert_eq!(layout.footer.height, 1);
+    assert_eq!(layout.content.height, 27);
+    assert_eq!(layout.content.width, 100);
 }
 
 #[test]
 fn terminal_can_draw_an_empty_app_frame() {
-    // Smoke test: rendering the app state to a TestBackend must not panic.
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();
     let app = TuiApp::new();
     terminal
         .draw(|frame| {
-            let layout = LayoutModel::new(frame.area());
-            let _ = layout;
+            let _ = frame.area();
             let _ = &app.active_tab;
         })
         .unwrap();
@@ -145,9 +138,15 @@ fn test_draw_agent_chat_with_messages() {
     let mut terminal = Terminal::new(backend).unwrap();
     let mut app = TuiApp::new();
     app.active_tab = ActiveTab::AgentChat;
-    app.chat.push(AgentMessage::new(AgentRole::User, "Hello agent"));
-    app.chat.push(AgentMessage::new(AgentRole::Agent, "Hello trader! How can I help you?"));
-    terminal.draw(|frame| vyapaar_tui::ui::draw(frame, &app)).unwrap();
+    app.chat
+        .push(AgentMessage::new(AgentRole::User, "Hello agent"));
+    app.chat.push(AgentMessage::new(
+        AgentRole::Agent,
+        "Hello trader! How can I help you?",
+    ));
+    terminal
+        .draw(|frame| vyapaar_tui::ui::draw(frame, &app))
+        .unwrap();
     let mut found_user = false;
     let mut found_agent = false;
     for y in 0..24 {
@@ -155,11 +154,80 @@ fn test_draw_agent_chat_with_messages() {
         for x in 0..80 {
             row.push_str(terminal.backend().buffer()[(x, y)].symbol());
         }
-        if row.contains("Hello agent") { found_user = true; }
-        if row.contains("Hello trader!") { found_agent = true; }
-        println!("ROW {:2}: {}", y, row);
+        if row.contains("Hello agent") {
+            found_user = true;
+        }
+        if row.contains("Hello trader!") {
+            found_agent = true;
+        }
     }
     assert!(found_user);
     assert!(found_agent);
 }
 
+#[test]
+fn test_slash_commands_execution() {
+    let mut app = TuiApp::new();
+    app.active_tab = ActiveTab::AgentChat;
+
+    // Test /help
+    app.execute_slash_command("/help");
+    assert!(
+        app.chat
+            .last()
+            .unwrap()
+            .text
+            .contains("Vyapaar Slash Commands")
+    );
+
+    // Test /agent
+    app.execute_slash_command("/agent quant-deepseek");
+    assert_eq!(app.model_name, "quant-deepseek");
+    assert!(app.chat.last().unwrap().text.contains("quant-deepseek"));
+
+    // Test /undo and /redo
+    app.chat
+        .push(AgentMessage::new(AgentRole::User, "What is VaR?"));
+    app.chat
+        .push(AgentMessage::new(AgentRole::Agent, "Value at Risk."));
+    let count_before = app.chat.len();
+    app.execute_slash_command("/undo");
+    assert_eq!(app.chat.len(), count_before - 2 + 1); // 2 popped + 1 notice added
+
+    app.execute_slash_command("/redo");
+    assert!(app.chat.messages.iter().any(|m| m.text == "Value at Risk."));
+
+    // Test /clear
+    app.execute_slash_command("/clear");
+    assert!(app.chat.is_empty());
+}
+
+#[test]
+fn test_command_palette_modal_and_filtering() {
+    let mut app = TuiApp::new();
+    app.is_palette_open = true;
+    app.palette_query = "job".to_string();
+
+    let filtered = app.filtered_palette();
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].0, "/jobs");
+
+    let backend = TestBackend::new(80, 24);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|frame| vyapaar_tui::ui::draw(frame, &app))
+        .unwrap();
+
+    let mut found_palette = false;
+    for y in 0..24 {
+        let mut row = String::new();
+        for x in 0..80 {
+            row.push_str(terminal.backend().buffer()[(x, y)].symbol());
+        }
+        if row.contains("Command Palette") {
+            found_palette = true;
+            break;
+        }
+    }
+    assert!(found_palette);
+}

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use vyapaar_agent_llm::{CandleGgufConfig, CandleGgufProvider};
 use vyapaar_cli::args::parse;
-use vyapaar_cli::runner::{CommandOutcome, resolve_provider, run};
+use vyapaar_cli::runner::{CliError, CommandOutcome, resolve_provider, run};
 use vyapaar_tui::TuiApp;
 
 fn main() -> ExitCode {
@@ -44,13 +44,29 @@ fn main() -> ExitCode {
                 CommandOutcome::ScanResults { rows } => {
                     println!("vyapaar: scan returned {rows} rows")
                 }
+                CommandOutcome::JobsSuccess(msg) => println!("{msg}"),
+                CommandOutcome::VerifySuccess { message, .. } => println!("{message}"),
+                CommandOutcome::MemorySuccess(msg) => println!("{msg}"),
+                CommandOutcome::PluginSuccess(msg) => println!("{msg}"),
+                CommandOutcome::DoctorReport(report) => println!("{report}"),
+                CommandOutcome::PurgeSuccess(msg) => println!("{msg}"),
                 CommandOutcome::HealthReport(report) => println!("{report}"),
             }
             ExitCode::SUCCESS
         }
-        Err(err) => {
-            eprintln!("vyapaar: error: {err}");
-            ExitCode::from(1)
-        }
+        Err(err) => match &err {
+            CliError::MissingFile(msg) => {
+                eprintln!("vyapaar: file error: {msg}");
+                ExitCode::from(2)
+            }
+            CliError::VerificationFailed(msg) => {
+                eprintln!("vyapaar: verification failed: {msg}");
+                ExitCode::from(1)
+            }
+            other => {
+                eprintln!("vyapaar: error: {other}");
+                ExitCode::from(1)
+            }
+        },
     }
 }

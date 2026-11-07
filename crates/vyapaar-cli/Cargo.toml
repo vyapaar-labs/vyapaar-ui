@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Vyapaar developer CLI: tui, ask, chat, scan, health subcommands"
+description = "Vyapaar quantitative AI workstation & developer CLI implementing the Quantcept command hierarchy"
 
 [lib]
 name = "vyapaar_cli"
@@ -27,7 +27,5 @@ futures.workspace = true
 rust_decimal.workspace = true
 clap.workspace = true
 serde.workspace = true
-thiserror.workspace = true
-
-[dev-dependencies]
 serde_json.workspace = true
+thiserror.workspace = true

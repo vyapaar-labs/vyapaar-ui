@@ -1,19 +1,23 @@
 //! # व्यापार・face vyapaar-cli
 //!
-//! The Vyapaar developer CLI (`vyapaar` binary) with four subcommands
-//! (migration-guide.md §1): `tui`, `ask`, `scan`, `health`.
-//!
-//! Scope discipline (docs/plans/0001 §1): the surface is exactly the
-//! four-command contract the migration guide asks for — no `plugin`/`jobs`/
-//! `memory` backlog. `Tui` launches `vyapaar_tui::TuiApp`; `Ask`, `Scan`,
-//! and `Health` are thin runners with clear "not yet wired" errors where the
-//! backend (agent / market screener) is not available in-process yet.
-//!
-//! This crate is argument-parsing and dispatch only; it depends on
-//! `vyapaar-tui` for the terminal and keeps no rendering logic of its own.
+//! The Vyapaar quantitative AI workstation and developer CLI (`vyapaar` binary)
+//! implementing the full Quantcept command hierarchy:
+//! - `tui`: interactive multi-tab Ratatui workstation.
+//! - `ask`: single-turn headless quantitative question answering.
+//! - `chat`: interactive multi-turn terminal conversation.
+//! - `scan`: vectorized universe screener scanner.
+//! - `jobs`: autonomous scheduled research jobs, cron evaluator, and approval gates.
+//! - `verify`: static strategy verification for lookahead bias and data leakage.
+//! - `memory`: semantic knowledge store, note indexing, and distillation.
+//! - `plugin`: skills and plugin extensions.
+//! - `doctor`: environment diagnostic health check and auto-fix.
+//! - `purge`: cache and temporary artifact purge.
 
 pub mod args;
 pub mod runner;
 
-pub use args::{AskArgs, CliArgs, Command, ScanArgs};
-pub use runner::{CliError, CommandOutcome, run};
+pub use args::{
+    AskArgs, ChatArgs, CliArgs, Command, DoctorArgs, JobsArgs, LogLevel, MemoryArgs, MissedPolicy,
+    PluginArgs, PurgeArgs, ScanArgs, VerifyArgs,
+};
+pub use runner::{CliError, CommandOutcome, resolve_provider, run, run_with_provider};

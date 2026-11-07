@@ -4,7 +4,7 @@ use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Row, Table, Tabs, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Row, Table, Tabs, Wrap};
 
 use vyapaar_highlight::HighlightClass;
 
@@ -91,10 +91,23 @@ pub fn draw(frame: &mut Frame, app: &TuiApp) {
 
     // 4. Footer
     draw_footer(frame, layout.footer, app);
+
+    // 5. Palette overlay
+    if app.is_palette_open {
+        draw_palette(frame, frame.area(), app);
+    }
 }
 
 fn draw_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
-    let mode_str = if app.is_input_mode {
+    let mode_str = if app.is_palette_open {
+        Span::styled(
+            " [COMMAND PALETTE] ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else if app.is_input_mode {
         Span::styled(
             " [CHAT INPUT] ",
             Style::default()
@@ -105,46 +118,48 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
     } else {
         Span::styled(
             " [NORMAL] ",
-            Style::default().fg(Color::Black).bg(Color::DarkGray),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::DIM),
         )
     };
 
     let title_line = Line::from(vec![
         Span::styled(
-            " व्यापार ・ Vyapaar Terminal Workstation ",
+            "व्यापार・Vyapaar",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" | Model: "),
-        Span::styled(&app.model_name, Style::default().fg(Color::Green)),
-        Span::raw(" | "),
+        Span::raw(" | Indian Equities Quantitative Workstation "),
         mode_str,
+        Span::styled(
+            format!(" | LLM: {}", app.model_name),
+            Style::default().fg(Color::Green),
+        ),
     ]);
 
-    let paragraph = Paragraph::new(title_line)
-        .style(Style::default().bg(Color::Reset))
-        .alignment(Alignment::Left);
-    frame.render_widget(paragraph, area);
+    let p = Paragraph::new(title_line).alignment(Alignment::Left);
+    frame.render_widget(p, area);
 }
 
 fn draw_tabs(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let titles: Vec<Line> = ActiveTab::ALL
         .iter()
         .enumerate()
-        .map(|(i, t)| {
+        .map(|(i, tab)| {
             let num = i + 1;
-            Line::from(format!(" {num}: {} ", t.title()))
+            Line::from(format!(" {num}:{tab_title} ", tab_title = tab.title()))
         })
         .collect();
 
-    let current_idx = ActiveTab::ALL
+    let selected_tab_index = ActiveTab::ALL
         .iter()
         .position(|&t| t == app.active_tab)
         .unwrap_or(0);
 
     let tabs = Tabs::new(titles)
-        .select(current_idx)
+        .select(selected_tab_index)
         .style(Style::default().fg(Color::DarkGray))
         .highlight_style(
             Style::default()
@@ -152,45 +167,45 @@ fn draw_tabs(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 .add_modifier(Modifier::BOLD)
                 .add_modifier(Modifier::UNDERLINED),
         )
-        .divider(Span::raw("│"));
+        .divider(Span::raw("|"));
 
     frame.render_widget(tabs, area);
 }
 
 fn draw_content(frame: &mut Frame, area: Rect, app: &TuiApp) {
     match app.active_tab {
-        ActiveTab::AgentChat => draw_agent_chat(frame, area, app),
         ActiveTab::Watchlist => draw_watchlist(frame, area, app),
         ActiveTab::Screener => draw_placeholder(
             frame,
             area,
             "Neural AST Screener",
-            "Screening NSE/BSE universe for technical & fundamental criteria...",
+            "Vectorized query filter over 4,000 Arrow fields (P/E, ROCE, RSI, 52W).",
         ),
         ActiveTab::Portfolio => draw_placeholder(
             frame,
             area,
             "Portfolio Snapshot",
-            "Tracking holdings, P&L, realized/unrealized returns, and margin utilization...",
+            "FIFO tax-lots, unrealized STCG/LTCG, and real-time MTM valuation.",
         ),
         ActiveTab::Orders => draw_placeholder(
             frame,
             area,
-            "Live Orders",
-            "Real-time order manager (OMS) for Zerodha, Upstox, Fyers, and AngelOne...",
+            "Orders & OMS",
+            "Live order book state machine with SEBI pre-trade risk validation.",
         ),
         ActiveTab::Backtest => draw_placeholder(
             frame,
             area,
-            "Backtest Analytics",
-            "Deterministic backtest execution, walk-forward analysis, and Sharpe/DSR metrics...",
+            "Backtest Results",
+            "Walk-forward efficiency, Sharpe ratio, Deflated Sharpe, and PBO metrics.",
         ),
         ActiveTab::Algos => draw_placeholder(
             frame,
             area,
-            "Algorithm Management",
-            "SEBI-compliant algo identifiers, strategy lifecycle, and parameter tuning...",
+            "Algos & Strategy Management",
+            "Deploy, verify lookahead bias, pause, and monitor live trading algorithms.",
         ),
+        ActiveTab::AgentChat => draw_agent_chat(frame, area, app),
     }
 }
 
@@ -203,39 +218,19 @@ fn draw_agent_chat(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let transcript_area = chunks[0];
     let input_area = chunks[1];
 
-    // Transcript
-    let mut lines = Vec::new();
-    if app.chat.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled(
-                "No conversation yet. ",
-                Style::default().fg(Color::DarkGray),
-            ),
-            Span::styled(
-                "Press 'i' or Enter to type a prompt to the AI agent.",
-                Style::default().fg(Color::Cyan),
-            ),
-        ]));
-    } else {
-        for msg in &app.chat.messages {
-            lines.extend(message_to_lines(msg));
-        }
-    }
-
-    let loading_indicator = if app.is_loading {
-        " ⚡ Generating... "
-    } else {
-        ""
-    };
+    // Transcript Box
     let transcript_block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::DarkGray))
-        .title(format!(
-            " Agent Chat — SmolLM2 Embedded SLM{loading_indicator}"
-        ));
+        .title(" Quantcept Research Desk (Live LLM Stream) ");
 
-    let total_lines = lines.len();
+    let mut lines = Vec::new();
+    for msg in &app.chat.messages {
+        lines.extend(message_to_lines(msg));
+    }
+
     let visible_height = transcript_area.height.saturating_sub(2) as usize;
+    let total_lines = lines.len();
     let scroll_y = if total_lines > visible_height {
         (total_lines - visible_height) as u16
     } else {
@@ -255,9 +250,9 @@ fn draw_agent_chat(frame: &mut Frame, area: Rect, app: &TuiApp) {
         Color::DarkGray
     };
     let input_title = if app.is_input_mode {
-        " Prompt (Enter: Send, Esc: Normal mode) "
+        " Prompt (Enter: Send, Esc: Normal mode, '/' or Ctrl+P: Palette) "
     } else {
-        " Prompt (Press 'i' or Enter to type) "
+        " Prompt (Press 'i' or Enter to type, Ctrl+P: Palette) "
     };
 
     let input_block = Block::default()
@@ -268,7 +263,7 @@ fn draw_agent_chat(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let input_text = if app.is_input_mode {
         format!("> {}▋", app.input_buffer)
     } else if app.input_buffer.is_empty() {
-        "> [Type 'i' to ask questions to the agent...]".to_string()
+        "> [Press 'i' to type prompt, '/' or Ctrl+P for slash commands...]".to_string()
     } else {
         format!("> {}", app.input_buffer)
     };
@@ -283,6 +278,66 @@ fn draw_agent_chat(frame: &mut Frame, area: Rect, app: &TuiApp) {
         .block(input_block)
         .style(input_style);
     frame.render_widget(input_p, input_area);
+}
+
+fn draw_palette(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let popup_width = 64.min(area.width.saturating_sub(4));
+    let popup_height = 16.min(area.height.saturating_sub(4));
+
+    let x = (area.width.saturating_sub(popup_width)) / 2;
+    let y = (area.height.saturating_sub(popup_height)) / 2;
+    let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+    frame.render_widget(Clear, popup_area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(" Command Palette (Up/Down: Navigate, Enter: Run, Esc: Close) ");
+
+    let filtered = app.filtered_palette();
+    let mut items = Vec::new();
+
+    items.push(Line::from(vec![
+        Span::styled("> ", Style::default().fg(Color::Cyan)),
+        Span::styled(&app.palette_query, Style::default().fg(Color::White)),
+        Span::styled("▋", Style::default().fg(Color::DarkGray)),
+    ]));
+    items.push(Line::from(
+        "─".repeat(popup_width.saturating_sub(2) as usize),
+    ));
+
+    if filtered.is_empty() {
+        items.push(Line::from("  No matching slash commands."));
+    } else {
+        for (idx, (cmd, desc)) in filtered.iter().enumerate() {
+            let is_sel = idx == app.palette_selected;
+            let style = if is_sel {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+
+            let prefix = if is_sel { "▶ " } else { "  " };
+            items.push(Line::from(vec![
+                Span::styled(format!("{prefix}{:<13} ", cmd), style),
+                Span::styled(
+                    *desc,
+                    if is_sel {
+                        style
+                    } else {
+                        Style::default().fg(Color::DarkGray)
+                    },
+                ),
+            ]));
+        }
+    }
+
+    let p = Paragraph::new(items).block(block);
+    frame.render_widget(p, popup_area);
 }
 
 fn draw_watchlist(frame: &mut Frame, area: Rect, _app: &TuiApp) {
@@ -301,51 +356,51 @@ fn draw_watchlist(frame: &mut Frame, area: Rect, _app: &TuiApp) {
         Row::new(vec![
             "NIFTY 50",
             "Index",
-            "24,852.15",
-            "+142.30 (+0.58%)",
-            "324.5M",
+            "24,148.20",
+            "+124.50 (+0.52%)",
+            "482.1M",
         ])
         .style(Style::default().fg(Color::Green)),
         Row::new(vec![
-            "NIFTY BANK",
+            "BANKNIFTY",
             "Index",
-            "52,310.80",
-            "+385.10 (+0.74%)",
-            "182.1M",
+            "51,885.10",
+            "-78.20 (-0.15%)",
+            "215.4M",
         ])
-        .style(Style::default().fg(Color::Green)),
+        .style(Style::default().fg(Color::Red)),
         Row::new(vec![
             "RELIANCE",
             "NSE Equity",
-            "2,745.50",
-            "-12.20 (-0.44%)",
-            "6.4M",
+            "2,980.50",
+            "+34.00 (+1.15%)",
+            "8.4M",
+        ])
+        .style(Style::default().fg(Color::Green)),
+        Row::new(vec![
+            "TCS",
+            "NSE Equity",
+            "4,120.00",
+            "-12.50 (-0.30%)",
+            "2.9M",
         ])
         .style(Style::default().fg(Color::Red)),
         Row::new(vec![
             "HDFCBANK",
             "NSE Equity",
-            "1,780.25",
-            "+18.60 (+1.06%)",
+            "1,648.75",
+            "+5.10 (+0.31%)",
             "14.2M",
         ])
         .style(Style::default().fg(Color::Green)),
         Row::new(vec![
             "INFY",
             "NSE Equity",
-            "1,895.00",
-            "+31.50 (+1.69%)",
-            "8.9M",
+            "1,822.30",
+            "-4.40 (-0.24%)",
+            "6.1M",
         ])
-        .style(Style::default().fg(Color::Green)),
-        Row::new(vec![
-            "TCS",
-            "NSE Equity",
-            "4,120.30",
-            "+15.00 (+0.37%)",
-            "2.1M",
-        ])
-        .style(Style::default().fg(Color::Green)),
+        .style(Style::default().fg(Color::Red)),
         Row::new(vec![
             "ICICIBANK",
             "NSE Equity",
@@ -389,7 +444,7 @@ fn draw_placeholder(frame: &mut Frame, area: Rect, title: &str, description: &st
         )]),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "  Tip: Switch to the Agent tab (press '7' or Tab) to chat with the embedded LLM.",
+            "  Tip: Switch to the Agent tab (press '7' or Tab) to chat, or Ctrl+P for slash commands.",
             Style::default().fg(Color::DarkGray),
         )]),
     ];
@@ -402,6 +457,8 @@ fn draw_footer(frame: &mut Frame, area: Rect, _app: &TuiApp) {
     let footer_text = Line::from(vec![
         Span::styled(" [Tab / 1-7] ", Style::default().fg(Color::Yellow)),
         Span::raw("Tabs | "),
+        Span::styled("[Ctrl+P] ", Style::default().fg(Color::Magenta)),
+        Span::raw("Palette | "),
         Span::styled("[i / Enter] ", Style::default().fg(Color::Yellow)),
         Span::raw("Chat Input | "),
         Span::styled("[Esc] ", Style::default().fg(Color::Yellow)),

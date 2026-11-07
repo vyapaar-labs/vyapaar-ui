@@ -1,31 +1,31 @@
-//! Agent chat transcript and markdown rendering.
+//! Chat transcript and message models for the Ratatui agent tab.
 
 use serde::{Deserialize, Serialize};
-use vyapaar_highlight::{Language, highlight_code};
+use vyapaar_highlight::{HighlightSpan, Language, highlight_code};
 
-/// Who produced a chat message.
+/// The role of the speaker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentRole {
-    /// The user.
+    /// The user asking questions.
     User,
-    /// The agent.
+    /// The agent answering.
     Agent,
-    /// The system (status, errors).
+    /// System notices.
     System,
 }
 
-/// A single chat message.
+/// A single message in the chat history.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentMessage {
-    /// The role that produced the message.
+    /// Who sent this message.
     pub role: AgentRole,
-    /// The message text (markdown).
+    /// The text content of the message.
     pub text: String,
 }
 
 impl AgentMessage {
-    /// Create a new message.
+    /// Construct a new message.
     pub fn new(role: AgentRole, text: impl Into<String>) -> Self {
         Self {
             role,
@@ -33,8 +33,8 @@ impl AgentMessage {
         }
     }
 
-    /// Highlight this message's markdown, returning styled spans.
-    pub fn highlight(&self) -> Vec<vyapaar_highlight::HighlightSpan> {
+    /// Highlight this message with Markdown semantics.
+    pub fn highlight(&self) -> Vec<HighlightSpan> {
         highlight_code(Language::Markdown, &self.text)
     }
 }
@@ -57,6 +57,11 @@ impl ChatTranscript {
     /// Append a message.
     pub fn push(&mut self, message: AgentMessage) {
         self.messages.push(message);
+    }
+
+    /// Clear all messages from transcript.
+    pub fn clear(&mut self) {
+        self.messages.clear();
     }
 
     /// The number of messages.
