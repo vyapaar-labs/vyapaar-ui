@@ -212,7 +212,6 @@ pub struct PurgeArgs {
     pub yes: bool,
 }
 
-
 /// Arguments for `vyapaar strategy run`.
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
 pub struct StrategyRunArgs {
@@ -446,6 +445,7 @@ pub struct Cli {
     pub command: Option<CliCommand>,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for Cli {
     fn default() -> Self {
         Self {

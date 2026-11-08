@@ -294,7 +294,7 @@ impl TuiApp {
         let mut chat = ChatTranscript::new();
         chat.push(AgentMessage::new(
             AgentRole::Agent,
-            "Namaste! I am Vyapaar Agent, your local in-process AI trading workstation powered by SmolLM2 (Candle GGUF).\n\
+            "Namaste! I am Vyapaar Agent, your local in-process AI trading workstation powered by Llama-3.2-3B (Candle GGUF).\n\
 Ask me anything about market microstructure, order books, technical strategies, risk management, or Indian equities (NSE/BSE).\n\
 Press 'i' or Enter to type a prompt. Type '/' or press Ctrl+P for slash commands.",
         ));
@@ -364,7 +364,7 @@ Press 'i' or Enter to type a prompt. Type '/' or press Ctrl+P for slash commands
             input_buffer: String::new(),
             is_input_mode: false,
             is_loading: false,
-            model_name: "SmolLM2-360M-Instruct (Candle GGUF)".to_string(),
+            model_name: "Llama-3.2-3B-Instruct (Candle GGUF)".to_string(),
             pending_prompt: None,
             is_palette_open: false,
             palette_query: String::new(),
@@ -493,7 +493,7 @@ Press 'i' or Enter to type a prompt. Type '/' or press Ctrl+P for slash commands
             }
             "/agent" => match arg {
                 "off" | "default" => {
-                    self.model_name = "SmolLM2-360M-Instruct (Candle GGUF)".to_string();
+                    self.model_name = "Llama-3.2-3B-Instruct (Candle GGUF)".to_string();
                     self.chat.push(AgentMessage::new(
                         AgentRole::System,
                         "Reset active persona to base workstation assistant.",
@@ -646,7 +646,7 @@ Press 'i' or Enter to type a prompt. Type '/' or press Ctrl+P for slash commands
                 ));
             }
             "/unbind" => {
-                self.model_name = "SmolLM2-360M-Instruct (Candle GGUF)".to_string();
+                self.model_name = "Llama-3.2-3B-Instruct (Candle GGUF)".to_string();
                 self.chat.push(AgentMessage::new(
                     AgentRole::System,
                     "Unbound persona and model overrides. Reverted to default workstation configuration.",

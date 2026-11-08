@@ -17,6 +17,7 @@
 //! - `purge`: cache and temporary artifact purge.
 
 pub mod args;
+pub mod backtest_gen;
 pub mod runner;
 pub mod strategy_bridge;
 
@@ -26,5 +27,6 @@ pub use args::{
     StrategyArgs, StrategyRunArgs, StrategySubcommand, StrategySuggestArgs, StrategyTuneArgs,
     VerifyArgs, resolve_log_level,
 };
+pub use backtest_gen::{BacktestQuerySpec, handle_backtest_query, parse_backtest_query};
 pub use runner::{CliError, CommandOutcome, resolve_provider, run, run_with_provider};
 pub use strategy_bridge::StrategyBridge;

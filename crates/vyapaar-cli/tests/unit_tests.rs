@@ -170,7 +170,10 @@ fn run_ask_fails_with_not_wired_without_provider() {
         command: Command::Ask(AskArgs::new("hello")),
         ..Default::default()
     };
-    assert_eq!(run_with_provider(&cli, None), Err(CliError::NotWired("vyapaar ask".into())));
+    assert_eq!(
+        run_with_provider(&cli, None),
+        Err(CliError::NotWired("vyapaar ask".into()))
+    );
 }
 
 #[test]
@@ -505,4 +508,34 @@ fn run_ask_empty_prompt_errors() {
         ..Default::default()
     };
     assert!(run(&cli).is_err());
+}
+
+#[test]
+fn test_parse_backtest_query() {
+    use vyapaar_cli::backtest_gen::parse_backtest_query;
+    let spec =
+        parse_backtest_query("backtest 10L on Alpha30 stocks ; with 15 day rebalancing").unwrap();
+    assert_eq!(spec.capital, rust_decimal::Decimal::from(1_000_000));
+    assert_eq!(spec.universe, "Alpha30");
+    assert_eq!(spec.rebalance_days, 15);
+}
+
+#[test]
+fn test_run_ask_backtest_synthesis() {
+    let cli = CliArgs {
+        command: Command::Ask(AskArgs::new(
+            "backtest 10L on Alpha30 stocks ; with 15 day rebalancing",
+        )),
+        ..Default::default()
+    };
+    let outcome = run(&cli).unwrap();
+    match outcome {
+        CommandOutcome::Answer(ans) => {
+            assert!(ans.contains("Backtest Execution Report"));
+            assert!(ans.contains("Alpha30"));
+            assert!(ans.contains("15-Day Rebalance"));
+            assert!(std::path::Path::new("backtest_alpha30.py").exists());
+        }
+        other => panic!("expected Answer with backtest report, got {other:?}"),
+    }
 }

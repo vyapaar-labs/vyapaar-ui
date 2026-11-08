@@ -862,7 +862,7 @@ impl StrategyBridge {
 
         for combo in combinations {
             let mut test_params = default_params.clone();
-            for (k, val) in sweep_keys.iter().zip(combo.into_iter()) {
+            for (k, val) in sweep_keys.iter().zip(combo) {
                 test_params.insert(k.clone(), val);
             }
 
