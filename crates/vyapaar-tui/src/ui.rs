@@ -4,7 +4,9 @@ use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Row, Table, Tabs, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Row, Sparkline, Table, Tabs, Wrap};
+use rust_decimal::Decimal;
+use vyapaar_ui_core::algos::AlgoStatus;
 
 use vyapaar_highlight::HighlightClass;
 
@@ -193,18 +195,8 @@ fn draw_content(frame: &mut Frame, area: Rect, app: &TuiApp) {
             "Orders & OMS",
             "Live order book state machine with SEBI pre-trade risk validation.",
         ),
-        ActiveTab::Backtest => draw_placeholder(
-            frame,
-            area,
-            "Backtest Results",
-            "Walk-forward efficiency, Sharpe ratio, Deflated Sharpe, and PBO metrics.",
-        ),
-        ActiveTab::Algos => draw_placeholder(
-            frame,
-            area,
-            "Algos & Strategy Management",
-            "Deploy, verify lookahead bias, pause, and monitor live trading algorithms.",
-        ),
+        ActiveTab::Backtest => draw_backtest(frame, area, app),
+        ActiveTab::Algos => draw_algos(frame, area, app),
         ActiveTab::AgentChat => draw_agent_chat(frame, area, app),
     }
 }
@@ -471,4 +463,336 @@ fn draw_footer(frame: &mut Frame, area: Rect, _app: &TuiApp) {
         .style(Style::default().fg(Color::DarkGray))
         .alignment(Alignment::Center);
     frame.render_widget(p, area);
+}
+
+
+fn draw_algos(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let vert_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(3), Constraint::Length(1)])
+        .split(area);
+
+    let main_area = vert_chunks[0];
+    let action_bar_area = vert_chunks[1];
+
+    let horiz_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(main_area);
+
+    let left_area = horiz_chunks[0];
+    let right_area = horiz_chunks[1];
+
+    // Left Panel: Table of registered algorithms
+    let header = Row::new(vec!["Algorithm", "Version", "Status", "Sharpe", "Instruments"]).style(
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    );
+
+    let mut rows = Vec::new();
+    for (idx, algo) in app.algos.iter().enumerate() {
+        let is_selected = idx == app.selected_algo_index;
+        let (status_str, _status_color) = match algo.status {
+            AlgoStatus::Active => ("● Active", Color::Green),
+            AlgoStatus::Paused => ("❚❚ Paused", Color::Yellow),
+            AlgoStatus::Stopped => ("■ Stopped", Color::Red),
+            AlgoStatus::Error => ("✖ Error", Color::LightRed),
+        };
+
+        let inst_str = algo.descriptor.target_instruments.join(", ");
+        let name_display = if is_selected {
+            format!("▶ {}", algo.descriptor.name)
+        } else {
+            format!("  {}", algo.descriptor.name)
+        };
+
+        let row_style = if is_selected {
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        rows.push(
+            Row::new(vec![
+                name_display,
+                algo.descriptor.version.clone(),
+                status_str.to_string(),
+                format!("{:.2}", algo.baseline_sharpe),
+                inst_str,
+            ])
+            .style(row_style),
+        );
+    }
+
+    let left_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray))
+        .title(" Registered Algorithms (60%) ");
+
+    let widths = [
+        Constraint::Percentage(32),
+        Constraint::Percentage(12),
+        Constraint::Percentage(16),
+        Constraint::Percentage(12),
+        Constraint::Percentage(28),
+    ];
+
+    let table = Table::new(rows, widths).header(header).block(left_block);
+    frame.render_widget(table, left_area);
+
+    // Right Panel: Selected Strategy Details & Parameter Inspector
+    let right_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray))
+        .title(" Selected Strategy & Parameter Inspector (40%) ");
+
+    let mut details_lines = Vec::new();
+    if let Some(selected) = app.selected_algo() {
+        details_lines.push(Line::from(vec![
+            Span::styled("Strategy: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(&selected.descriptor.name, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(format!(" ({})", selected.descriptor.id), Style::default().fg(Color::DarkGray)),
+        ]));
+        details_lines.push(Line::from(vec![
+            Span::styled("Version:  ", Style::default().fg(Color::Cyan)),
+            Span::styled(&selected.descriptor.version, Style::default().fg(Color::White)),
+            Span::styled(" | Origin: ", Style::default().fg(Color::Cyan)),
+            Span::styled(selected.descriptor.source.as_str(), Style::default().fg(Color::Yellow)),
+        ]));
+        details_lines.push(Line::from(vec![
+            Span::styled("Status:   ", Style::default().fg(Color::Cyan)),
+            Span::styled(selected.status.as_str(), Style::default().fg(match selected.status {
+                AlgoStatus::Active => Color::Green,
+                AlgoStatus::Paused => Color::Yellow,
+                _ => Color::Red,
+            })),
+            Span::styled(format!(" | Baseline Sharpe: {:.2}", selected.baseline_sharpe), Style::default().fg(Color::White)),
+        ]));
+        details_lines.push(Line::from(""));
+        details_lines.push(Line::from(vec![
+            Span::styled("Description: ", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            Span::styled(&selected.descriptor.description, Style::default().fg(Color::White)),
+        ]));
+        details_lines.push(Line::from(""));
+        details_lines.push(Line::from(Span::styled("─── Parameter Search Contract ──────────────────────────", Style::default().fg(Color::DarkGray))));
+
+        for p in &selected.descriptor.parameters {
+            let range_str = if let (Some(min), Some(max), Some(step)) = (p.min, p.max, p.step) {
+                format!("{min} .. {max} (step {step})")
+            } else {
+                "Fixed (no sweep)".to_string()
+            };
+            details_lines.push(Line::from(vec![
+                Span::styled(format!(" • {:<15} ", p.name), Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("Default: {:<5} ", p.default), Style::default().fg(Color::White)),
+                Span::styled(format!("[{range_str}]"), Style::default().fg(Color::Yellow)),
+            ]));
+            if !p.description.is_empty() {
+                details_lines.push(Line::from(Span::styled(format!("   ↳ {}", p.description), Style::default().fg(Color::DarkGray))));
+            }
+        }
+
+        details_lines.push(Line::from(""));
+        details_lines.push(Line::from(vec![
+            Span::styled("Target Instruments: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(selected.descriptor.target_instruments.join(", "), Style::default().fg(Color::Green)),
+        ]));
+    } else {
+        details_lines.push(Line::from("  No strategy selected."));
+    }
+
+    let p = Paragraph::new(details_lines)
+        .block(right_block)
+        .wrap(Wrap { trim: true });
+    frame.render_widget(p, right_area);
+
+    // Action Bar
+    let action_line = Line::from(vec![
+        Span::styled(" [Enter] ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::raw("Backtest | "),
+        Span::styled("[T] ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::raw("Tune Params | "),
+        Span::styled("[S] ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::raw("Suggest Trade | "),
+        Span::styled("[Space] ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::raw("Toggle Status | "),
+        Span::styled("[↑/↓ or j/k] ", Style::default().fg(Color::Cyan)),
+        Span::raw("Navigate"),
+    ]);
+    let action_bar = Paragraph::new(action_line).alignment(Alignment::Center);
+    frame.render_widget(action_bar, action_bar_area);
+}
+
+fn draw_backtest(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
+
+    let top_row = rows[0];
+    let bottom_row = rows[1];
+
+    let top_quads = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(top_row);
+
+    let bottom_quads = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(bottom_row);
+
+    let q1_area = top_quads[0];
+    let q2_area = top_quads[1];
+    let q3_area = bottom_quads[0];
+    let q4_area = bottom_quads[1];
+
+    // Q1: Top Left - KPI Cards
+    let q1_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray))
+        .title(" Key Performance Indicators (KPIs) ");
+
+    let mut kpi_lines = Vec::new();
+    if let Some(ref r) = app.backtest_report {
+        let pnl_color = if r.net_pnl >= Decimal::ZERO { Color::Green } else { Color::Red };
+        let pnl_sign = if r.net_pnl >= Decimal::ZERO { "+" } else { "" };
+        let ret_sign = if r.total_return_pct >= Decimal::ZERO { "+" } else { "" };
+
+        kpi_lines.push(Line::from(""));
+        kpi_lines.push(Line::from(vec![
+            Span::styled("  Initial Capital: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("₹{:.2}", r.initial_capital), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled("   Final Equity: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("₹{:.2}", r.final_equity), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        ]));
+        kpi_lines.push(Line::from(""));
+        kpi_lines.push(Line::from(vec![
+            Span::styled("  Net Profit/Loss: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}{:.2}", pnl_sign, r.net_pnl), Style::default().fg(pnl_color).add_modifier(Modifier::BOLD)),
+            Span::styled("   Total Return: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}{:.2}%", ret_sign, r.total_return_pct), Style::default().fg(pnl_color).add_modifier(Modifier::BOLD)),
+        ]));
+        kpi_lines.push(Line::from(""));
+        kpi_lines.push(Line::from(vec![
+            Span::styled("  Sharpe Ratio:    ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{:.2}", r.sharpe_ratio), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled("   Max Drawdown: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{:.2}%", r.max_drawdown_pct), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        ]));
+        kpi_lines.push(Line::from(""));
+        kpi_lines.push(Line::from(vec![
+            Span::styled("  Total Trades:    ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}", r.total_trades), Style::default().fg(Color::White)),
+            Span::styled("         Win Rate:     ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{:.2}%", r.win_rate_pct), Style::default().fg(Color::Green)),
+            Span::styled(" | Profit Factor: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{:.2}", r.profit_factor), Style::default().fg(Color::White)),
+        ]));
+    } else {
+        kpi_lines.push(Line::from("  No backtest loaded. Press [Enter] on an algorithm or type /backtest."));
+    }
+    let p1 = Paragraph::new(kpi_lines).block(q1_block);
+    frame.render_widget(p1, q1_area);
+
+    // Q2: Top Right - Parameter Delta Comparison Table
+    let q2_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray))
+        .title(" Parameter Delta (Default vs Tuned) ");
+
+    let header2 = Row::new(vec!["Parameter", "Default", "Tuned Value", "Status"]).style(
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+    );
+    let mut rows2 = Vec::new();
+    if let Some(ref opt) = app.optimization_result {
+        for (k, v_tuned) in &opt.tuned_params {
+            let v_def = opt.default_params.get(k).copied().unwrap_or(*v_tuned);
+            let is_diff = v_tuned != &v_def;
+            let val_style = if is_diff {
+                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            rows2.push(Row::new(vec![
+                k.clone(),
+                format!("{v_def}"),
+                format!("{v_tuned}"),
+                if is_diff { "Tuned (Optimal)".to_string() } else { "Unchanged".to_string() },
+            ]).style(val_style));
+        }
+    }
+    let widths2 = [
+        Constraint::Percentage(35),
+        Constraint::Percentage(20),
+        Constraint::Percentage(25),
+        Constraint::Percentage(20),
+    ];
+    let t2 = Table::new(rows2, widths2).header(header2).block(q2_block);
+    frame.render_widget(t2, q2_area);
+
+    // Q3: Bottom Left - ASCII / Braille Equity Curve & Drawdown Chart (Sparkline)
+    let q3_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray))
+        .title(" Analytical Equity Curve (Sparkline) ");
+
+    let sparkline_data = &app.backtest_equity_curve;
+    let sparkline = Sparkline::default()
+        .block(q3_block)
+        .style(Style::default().fg(Color::Green))
+        .data(sparkline_data);
+    frame.render_widget(sparkline, q3_area);
+
+    // Q4: Bottom Right - Optimal Trade Suggestion Card
+    let q4_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(" Optimal Trade Suggestion ");
+
+    let mut sugg_lines = Vec::new();
+    if let Some(ref s) = app.trade_suggestion {
+        sugg_lines.push(Line::from(vec![
+            Span::styled("Asset: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(&s.symbol, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(" | Bias: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(s.signal.bias.as_str(), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        ]));
+        sugg_lines.push(Line::from(vec![
+            Span::styled("Trigger: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(&s.signal.reason, Style::default().fg(Color::Yellow)),
+        ]));
+        sugg_lines.push(Line::from(vec![
+            Span::styled("Entry: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("₹{:.2}", s.signal.entry_price), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(" | Stop Loss: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("₹{:.2}", s.signal.stop_loss), Style::default().fg(Color::Red)),
+        ]));
+        sugg_lines.push(Line::from(vec![
+            Span::styled("Target 1 (1:2): ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("₹{:.2}", s.signal.target_1), Style::default().fg(Color::Green)),
+            Span::styled(" | Target 2 (1:3): ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("₹{:.2}", s.signal.target_2), Style::default().fg(Color::Green)),
+        ]));
+        sugg_lines.push(Line::from(vec![
+            Span::styled("Sized Qty: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{} units", s.sizing.quantity), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(" | Margin: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("₹{:.2} ({:.1}%)", s.sizing.notional_value, s.sizing.margin_utilization_pct), Style::default().fg(Color::White)),
+        ]));
+        sugg_lines.push(Line::from(vec![
+            Span::styled("Friction Fee: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("₹{:.2}", s.statutory_charges.total_charges), Style::default().fg(Color::DarkGray)),
+            Span::styled(" | Net R:R: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("1 : {:.2}", s.statutory_charges.net_risk_reward_ratio), Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD)),
+        ]));
+    } else {
+        sugg_lines.push(Line::from("  No trade suggestion computed. Press [S] on an algo or type /suggest."));
+    }
+    let p4 = Paragraph::new(sugg_lines).block(q4_block).wrap(Wrap { trim: true });
+    frame.render_widget(p4, q4_area);
 }

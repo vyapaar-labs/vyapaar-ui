@@ -367,3 +367,128 @@ fn test_all_catalog_slash_commands_present() {
     assert!(commands.contains(&"/mcp"));
     assert!(commands.contains(&"/quit"));
 }
+
+#[test]
+fn test_algos_tab_state_and_render() {
+    let backend = TestBackend::new(120, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = TuiApp::new();
+    app.active_tab = ActiveTab::Algos;
+
+    assert!(app.algos.len() >= 4);
+    assert_eq!(app.selected_algo_index, 0);
+
+    // Navigate down with 'j'
+    let key_j = KeyEvent {
+        code: KeyCode::Char('j'),
+        modifiers: KeyModifiers::NONE,
+        kind: KeyEventKind::Press,
+        state: KeyEventState::NONE,
+    };
+    app.on_key(key_j);
+    assert_eq!(app.selected_algo_index, 1);
+
+    // Toggle status with Space
+    let initial_status = app.selected_algo().unwrap().status;
+    let key_space = KeyEvent {
+        code: KeyCode::Char(' '),
+        modifiers: KeyModifiers::NONE,
+        kind: KeyEventKind::Press,
+        state: KeyEventState::NONE,
+    };
+    app.on_key(key_space);
+    let new_status = app.selected_algo().unwrap().status;
+    assert_eq!(new_status, initial_status.toggle());
+
+    // Render frame
+    terminal.draw(|frame| vyapaar_tui::ui::draw(frame, &app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let content: String = buffer.content().iter().map(|c| c.symbol()).collect();
+    assert!(content.contains("Registered Algorithms"));
+    assert!(content.contains("Parameter Inspector"));
+    assert!(content.contains("Backtest"));
+}
+
+#[test]
+fn test_backtest_tab_render_and_quadrants() {
+    let backend = TestBackend::new(120, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut app = TuiApp::new();
+    app.active_tab = ActiveTab::Backtest;
+
+    assert!(app.backtest_report.is_some());
+    assert!(!app.backtest_equity_curve.is_empty());
+    assert!(app.trade_suggestion.is_some());
+
+    terminal.draw(|frame| vyapaar_tui::ui::draw(frame, &app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let content: String = buffer.content().iter().map(|c| c.symbol()).collect();
+    assert!(content.contains("Key Performance Indicators"));
+    assert!(content.contains("Parameter Delta"));
+    assert!(content.contains("Analytical Equity Curve"));
+    assert!(content.contains("Optimal Trade Suggestion"));
+}
+
+#[test]
+fn test_slash_commands_phase3_workflow() {
+    let mut app = TuiApp::new();
+
+    // 1. /algos
+    app.execute_slash_command("/algos");
+    assert_eq!(app.active_tab, ActiveTab::Algos);
+
+    // 2. /backtest turtle_breakout
+    app.execute_slash_command("/backtest turtle_breakout");
+    assert_eq!(app.active_tab, ActiveTab::Backtest);
+    assert!(app.backtest_report.is_some());
+
+    // 3. /tune turtle_breakout
+    app.execute_slash_command("/tune turtle_breakout");
+    assert_eq!(app.active_tab, ActiveTab::Backtest);
+    assert!(app.optimization_result.is_some());
+
+    // 4. /suggest turtle_breakout
+    app.execute_slash_command("/suggest turtle_breakout");
+    assert_eq!(app.active_tab, ActiveTab::Backtest);
+    assert!(app.trade_suggestion.is_some());
+}
+
+#[test]
+fn test_interactive_hotkeys_algos_to_backtest() {
+    let mut app = TuiApp::new();
+    app.active_tab = ActiveTab::Algos;
+
+    // Press Enter to backtest selected
+    let key_enter = KeyEvent {
+        code: KeyCode::Enter,
+        modifiers: KeyModifiers::NONE,
+        kind: KeyEventKind::Press,
+        state: KeyEventState::NONE,
+    };
+    app.on_key(key_enter);
+    assert_eq!(app.active_tab, ActiveTab::Backtest);
+
+    // Return to Algos and press 'T' to tune
+    app.active_tab = ActiveTab::Algos;
+    let key_t = KeyEvent {
+        code: KeyCode::Char('t'),
+        modifiers: KeyModifiers::NONE,
+        kind: KeyEventKind::Press,
+        state: KeyEventState::NONE,
+    };
+    app.on_key(key_t);
+    assert_eq!(app.active_tab, ActiveTab::Backtest);
+    assert!(app.optimization_result.is_some());
+
+    // Return to Algos and press 'S' to suggest
+    app.active_tab = ActiveTab::Algos;
+    let key_s = KeyEvent {
+        code: KeyCode::Char('s'),
+        modifiers: KeyModifiers::NONE,
+        kind: KeyEventKind::Press,
+        state: KeyEventState::NONE,
+    };
+    app.on_key(key_s);
+    assert_eq!(app.active_tab, ActiveTab::Backtest);
+    assert!(app.trade_suggestion.is_some());
+}

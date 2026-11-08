@@ -1,10 +1,16 @@
 //! The seven-tab workstation model and interactive slash command palette.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use vyapaar_ui_core::algos::AlgoStatus;
+use vyapaar_ui_core::strategy::{
+    BacktestReport, OptimizationResult, StrategyBridge, StrategyDescriptor, TradeSuggestion,
+};
 
 use crate::agent_chat::{AgentMessage, AgentRole, ChatTranscript};
 use crate::keybindings::{Action, handle_key};
+
 
 /// The workstation tabs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -78,8 +84,30 @@ impl ActiveTab {
     }
 }
 
+/// A registered algorithm row in the TUI Algos tab.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegisteredAlgo {
+    pub descriptor: StrategyDescriptor,
+    pub status: AlgoStatus,
+    pub baseline_sharpe: Decimal,
+}
+
 /// Catalog of built-in Quantcept-compatible slash commands.
 pub const SLASH_COMMANDS: &[(&str, &str)] = &[
+    ("/algos", "Switch directly to Algorithm Management tab"),
+    (
+        "/backtest",
+        "Execute backtest on specified or selected strategy (/backtest [strategy])",
+    ),
+    (
+        "/tune",
+        "Launch parameter optimization runner (/tune [strategy])",
+    ),
+    (
+        "/suggest",
+        "Generate optimal trade suggestion for active instrument (/suggest [strategy])",
+    ),
+
     (
         "/help",
         "List available slash commands and shortcuts (/help [command])",
@@ -246,6 +274,18 @@ pub struct TuiApp {
     pub auto_approve: bool,
     /// Current color theme.
     pub theme: String,
+    /// Registered trading algorithms for Algos tab.
+    pub algos: Vec<RegisteredAlgo>,
+    /// Selected algorithm index inside Algos tab.
+    pub selected_algo_index: usize,
+    /// Currently loaded backtest report for Backtest tab.
+    pub backtest_report: Option<BacktestReport>,
+    /// High-resolution equity curve points (normalized 0..100) for Backtest tab Sparkline.
+    pub backtest_equity_curve: Vec<u64>,
+    /// Parameter optimization result for Backtest tab.
+    pub optimization_result: Option<OptimizationResult>,
+    /// Optimal trade suggestion card for Backtest tab.
+    pub trade_suggestion: Option<TradeSuggestion>,
 }
 
 impl TuiApp {
@@ -258,6 +298,63 @@ impl TuiApp {
 Ask me anything about market microstructure, order books, technical strategies, risk management, or Indian equities (NSE/BSE).\n\
 Press 'i' or Enter to type a prompt. Type '/' or press Ctrl+P for slash commands.",
         ));
+
+        let discovered = StrategyBridge::discover_strategies();
+        let mut algos = Vec::new();
+        for (i, desc) in discovered.into_iter().enumerate() {
+            let status = match i % 3 {
+                0 => AlgoStatus::Active,
+                1 => AlgoStatus::Paused,
+                _ => AlgoStatus::Stopped,
+            };
+            let baseline_sharpe = match desc.id.as_str() {
+                "turtle_breakout" => Decimal::new(144, 2),
+                "sma_crossover" => Decimal::new(165, 2),
+                "rsi_reversal" => Decimal::new(138, 2),
+                "buy_and_hold" => Decimal::new(95, 2),
+                "twap_slicer" => Decimal::new(120, 2),
+                _ => Decimal::new(110, 2),
+            };
+            algos.push(RegisteredAlgo {
+                descriptor: desc,
+                status,
+                baseline_sharpe,
+            });
+        }
+
+        let mut backtest_report = None;
+        let mut backtest_equity_curve = Vec::new();
+        let mut optimization_result = None;
+        let mut trade_suggestion = None;
+
+        if let Some(first) = algos.first() {
+            let strat_name = &first.descriptor.id;
+            let symbol = first
+                .descriptor
+                .target_instruments
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "NSE:NIFTY50-INDEX".to_string());
+            let capital = Decimal::new(1000000, 0);
+
+            if let Ok((rep, curve)) =
+                StrategyBridge::run_backtest_with_curve(strat_name, &symbol, None, capital)
+            {
+                backtest_report = Some(rep);
+                backtest_equity_curve = curve;
+            }
+            if let Ok(opt) = StrategyBridge::tune_strategy(strat_name, &symbol, capital, "sharpe") {
+                optimization_result = Some(opt);
+            }
+            if let Ok(sugg) = StrategyBridge::generate_trade_suggestion(
+                strat_name,
+                &symbol,
+                capital,
+                Decimal::new(10, 1),
+            ) {
+                trade_suggestion = Some(sugg);
+            }
+        }
 
         Self {
             active_tab: ActiveTab::Watchlist,
@@ -275,6 +372,12 @@ Press 'i' or Enter to type a prompt. Type '/' or press Ctrl+P for slash commands
             undo_stack: Vec::new(),
             auto_approve: false,
             theme: "dark".to_string(),
+            algos,
+            selected_algo_index: 0,
+            backtest_report,
+            backtest_equity_curve,
+            optimization_result,
+            trade_suggestion,
         }
     }
 
@@ -312,6 +415,31 @@ Press 'i' or Enter to type a prompt. Type '/' or press Ctrl+P for slash commands
         };
 
         match cmd {
+            "/algos" => {
+                self.active_tab = ActiveTab::Algos;
+                self.chat.push(AgentMessage::new(
+                    AgentRole::System,
+                    "Switched to Algos & Strategy Management tab.",
+                ));
+            }
+            "/backtest" => {
+                match self.run_backtest_for_strategy(arg) {
+                    Ok(msg) => self.chat.push(AgentMessage::new(AgentRole::System, msg)),
+                    Err(err) => self.chat.push(AgentMessage::new(AgentRole::System, format!("Backtest error: {err}"))),
+                }
+            }
+            "/tune" => {
+                match self.tune_for_strategy(arg) {
+                    Ok(msg) => self.chat.push(AgentMessage::new(AgentRole::System, msg)),
+                    Err(err) => self.chat.push(AgentMessage::new(AgentRole::System, format!("Tuning error: {err}"))),
+                }
+            }
+            "/suggest" => {
+                match self.suggest_for_strategy(arg) {
+                    Ok(msg) => self.chat.push(AgentMessage::new(AgentRole::System, msg)),
+                    Err(err) => self.chat.push(AgentMessage::new(AgentRole::System, format!("Trade suggestion error: {err}"))),
+                }
+            }
             "/help" => {
                 if !arg.is_empty() {
                     let search = if arg.starts_with('/') {
@@ -836,6 +964,59 @@ Press 'i' or Enter to type a prompt. Type '/' or press Ctrl+P for slash commands
             return;
         }
 
+        // Algos tab interactive hotkeys: Up/Down/j/k, Space, Enter, T, S
+        if self.active_tab == ActiveTab::Algos && !self.is_input_mode && !self.is_palette_open {
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.selected_algo_index = self.selected_algo_index.saturating_sub(1);
+                    return;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if !self.algos.is_empty() {
+                        self.selected_algo_index =
+                            (self.selected_algo_index + 1).min(self.algos.len() - 1);
+                    }
+                    return;
+                }
+                KeyCode::Char(' ') => {
+                    self.toggle_selected_algo_status();
+                    return;
+                }
+                KeyCode::Enter => {
+                    let _ = self.run_backtest_for_strategy("");
+                    return;
+                }
+                KeyCode::Char('t') | KeyCode::Char('T') => {
+                    let _ = self.tune_for_strategy("");
+                    return;
+                }
+                KeyCode::Char('s') | KeyCode::Char('S') => {
+                    let _ = self.suggest_for_strategy("");
+                    return;
+                }
+                _ => {}
+            }
+        }
+
+        // Backtest tab interactive hotkeys: R/Enter re-run, T tune, S suggest
+        if self.active_tab == ActiveTab::Backtest && !self.is_input_mode && !self.is_palette_open {
+            match key.code {
+                KeyCode::Char('r') | KeyCode::Char('R') | KeyCode::Enter => {
+                    let _ = self.run_backtest_for_strategy("");
+                    return;
+                }
+                KeyCode::Char('t') | KeyCode::Char('T') => {
+                    let _ = self.tune_for_strategy("");
+                    return;
+                }
+                KeyCode::Char('s') | KeyCode::Char('S') => {
+                    let _ = self.suggest_for_strategy("");
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         // Direct tab switching with digits 1 through 7
         if let KeyCode::Char(c @ '1'..='7') = key.code {
             let idx = (c as u8 - b'1') as usize;
@@ -871,6 +1052,134 @@ Press 'i' or Enter to type a prompt. Type '/' or press Ctrl+P for slash commands
                 }
             }
         }
+    }
+
+    /// Selected algorithm in the Algos tab.
+    pub fn selected_algo(&self) -> Option<&RegisteredAlgo> {
+        self.algos.get(self.selected_algo_index)
+    }
+
+    /// Mutable selected algorithm in the Algos tab.
+    pub fn selected_algo_mut(&mut self) -> Option<&mut RegisteredAlgo> {
+        self.algos.get_mut(self.selected_algo_index)
+    }
+
+    /// Toggle status of currently selected algorithm.
+    pub fn toggle_selected_algo_status(&mut self) {
+        if let Some(algo) = self.selected_algo_mut() {
+            algo.status = algo.status.toggle();
+        }
+    }
+
+    /// Run backtest for given strategy (or selected) and update Backtest tab state.
+    pub fn run_backtest_for_strategy(&mut self, strategy_name: &str) -> Result<String, String> {
+        let name = if strategy_name.trim().is_empty() {
+            self.selected_algo()
+                .map(|a| a.descriptor.id.clone())
+                .unwrap_or_else(|| "turtle_breakout".to_string())
+        } else {
+            strategy_name.trim().to_string()
+        };
+
+        let symbol = self
+            .algos
+            .iter()
+            .find(|a| a.descriptor.id.eq_ignore_ascii_case(&name))
+            .and_then(|a| a.descriptor.target_instruments.first().cloned())
+            .unwrap_or_else(|| "NSE:NIFTY50-INDEX".to_string());
+
+        let capital = Decimal::new(1000000, 0);
+        let (report, curve) =
+            StrategyBridge::run_backtest_with_curve(&name, &symbol, None, capital)?;
+
+        let pnl_sign = if report.net_pnl >= Decimal::ZERO { "+" } else { "" };
+        let msg = format!(
+            "Executed backtest for '{name}' on {symbol}: Net PnL {pnl_sign}₹{:.2} ({:+.2}%), Sharpe {:.2}, Max DD {:.2}%.",
+            report.net_pnl, report.total_return_pct, report.sharpe_ratio, report.max_drawdown_pct
+        );
+
+        self.backtest_report = Some(report);
+        self.backtest_equity_curve = curve;
+        self.active_tab = ActiveTab::Backtest;
+
+        Ok(msg)
+    }
+
+    /// Tune given strategy (or selected) and update Backtest tab state.
+    pub fn tune_for_strategy(&mut self, strategy_name: &str) -> Result<String, String> {
+        let name = if strategy_name.trim().is_empty() {
+            self.selected_algo()
+                .map(|a| a.descriptor.id.clone())
+                .unwrap_or_else(|| "turtle_breakout".to_string())
+        } else {
+            strategy_name.trim().to_string()
+        };
+
+        let symbol = self
+            .algos
+            .iter()
+            .find(|a| a.descriptor.id.eq_ignore_ascii_case(&name))
+            .and_then(|a| a.descriptor.target_instruments.first().cloned())
+            .unwrap_or_else(|| "NSE:NIFTY50-INDEX".to_string());
+
+        let capital = Decimal::new(1000000, 0);
+        let opt = StrategyBridge::tune_strategy(&name, &symbol, capital, "sharpe")?;
+
+        let (report, curve) = StrategyBridge::run_backtest_with_curve(
+            &name,
+            &symbol,
+            Some(&opt.tuned_params),
+            capital,
+        )?;
+
+        let dsr_pct = (opt.deflated_sharpe * Decimal::new(100, 0)).round_dp(2);
+        let msg = format!(
+            "Tuned parameters for '{name}' on {symbol}: Sharpe improved from {:.2} to {:.2} (DSR: {}% confidence, {}).",
+            opt.default_sharpe, opt.tuned_sharpe, dsr_pct, opt.overfitting_verdict
+        );
+
+        self.optimization_result = Some(opt);
+        self.backtest_report = Some(report);
+        self.backtest_equity_curve = curve;
+        self.active_tab = ActiveTab::Backtest;
+
+        Ok(msg)
+    }
+
+    /// Generate optimal trade suggestion for given strategy (or selected).
+    pub fn suggest_for_strategy(&mut self, strategy_name: &str) -> Result<String, String> {
+        let name = if strategy_name.trim().is_empty() {
+            self.selected_algo()
+                .map(|a| a.descriptor.id.clone())
+                .unwrap_or_else(|| "turtle_breakout".to_string())
+        } else {
+            strategy_name.trim().to_string()
+        };
+
+        let symbol = self
+            .algos
+            .iter()
+            .find(|a| a.descriptor.id.eq_ignore_ascii_case(&name))
+            .and_then(|a| a.descriptor.target_instruments.first().cloned())
+            .unwrap_or_else(|| "NSE:NIFTY50-INDEX".to_string());
+
+        let capital = Decimal::new(1000000, 0);
+        let risk_pct = Decimal::new(10, 1);
+        let sugg = StrategyBridge::generate_trade_suggestion(&name, &symbol, capital, risk_pct)?;
+
+        let msg = format!(
+            "Optimal trade suggestion for '{name}' on {symbol}: {} at ₹{:.2} (SL: ₹{:.2}, T1: ₹{:.2}, Size: {} units).",
+            sugg.signal.bias.as_str(),
+            sugg.signal.entry_price,
+            sugg.signal.stop_loss,
+            sugg.signal.target_1,
+            sugg.sizing.quantity
+        );
+
+        self.trade_suggestion = Some(sugg);
+        self.active_tab = ActiveTab::Backtest;
+
+        Ok(msg)
     }
 
     fn move_selection(&mut self, action: Action) {

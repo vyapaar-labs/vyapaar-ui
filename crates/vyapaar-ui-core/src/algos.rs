@@ -27,6 +27,26 @@ impl AlgoStatus {
     pub fn is_live(&self) -> bool {
         matches!(self, Self::Active)
     }
+
+    /// Display string for status column.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Active => "Active",
+            Self::Paused => "Paused",
+            Self::Stopped => "Stopped",
+            Self::Error => "Error",
+        }
+    }
+
+    /// Cycle status when space is pressed (Active -> Paused -> Stopped -> Active).
+    pub fn toggle(&self) -> Self {
+        match self {
+            Self::Active => Self::Paused,
+            Self::Paused => Self::Stopped,
+            Self::Stopped => Self::Active,
+            Self::Error => Self::Active,
+        }
+    }
 }
 
 /// One rendered algo/strategy management row.
