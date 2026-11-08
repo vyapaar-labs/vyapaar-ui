@@ -61,6 +61,7 @@ clap = { version = "4", features = ["derive"] }
 ratatui = "0.29"
 crossterm = "0.28"
 futures = "0.3"
+toml = "0.8"
 # getrandom needs the `wasm_js` feature for wasm32-unknown-unknown; the
 # feature is enabled from the WASM crates that must compile to that target.
 getrandom = { version = "0.4", features = ["wasm_js"] }

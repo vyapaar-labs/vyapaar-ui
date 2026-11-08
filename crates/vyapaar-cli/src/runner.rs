@@ -13,8 +13,12 @@ use vyapaar_agent_llm::{
 
 use crate::args::{
     AskArgs, ChatArgs, CliArgs, Command, DoctorArgs, JobsArgs, MarketplaceArgs, McpArgs,
-    MemoryArgs, OutputFormat, PluginArgs, PurgeArgs, ScanArgs, SkillsArgs, VerifyArgs,
+    MemoryArgs, OutputFormat, PluginArgs, PurgeArgs, ScanArgs, SkillsArgs, StrategyArgs,
+    VerifyArgs,
 };
+use crate::strategy_bridge::StrategyBridge;
+use std::collections::BTreeMap;
+use rust_decimal::Decimal;
 
 /// Errors surfaced by the CLI runner.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,6 +83,8 @@ pub enum CommandOutcome {
     PurgeSuccess(String),
     /// A `health` check produced a report string.
     HealthReport(String),
+    /// A `strategy` command produced an outcome message.
+    StrategySuccess(String),
 }
 
 fn vyapaar_home_dir() -> PathBuf {
@@ -180,6 +186,7 @@ pub fn run_with_provider(
         Command::Doctor(args) => run_doctor(args),
         Command::Purge(args) => run_purge(args),
         Command::Health => run_health(),
+        Command::Strategy(args) => run_strategy(args),
     }
 }
 
@@ -894,4 +901,212 @@ fn run_health() -> Result<CommandOutcome, CliError> {
         "vyapaar: healthy (tui ready, ask/chat wired to Candle GGUF, scan pending universe)"
             .to_string(),
     ))
+}
+
+
+fn run_strategy(args: &StrategyArgs) -> Result<CommandOutcome, CliError> {
+    match args {
+        StrategyArgs::List => {
+            let strategies = StrategyBridge::discover_strategies();
+            let mut out = String::from(
+                "ID                NAME                             VERSION  SOURCE    TARGETS             PARAMETERS\n"
+            );
+            out.push_str(
+                "────────────────  ───────────────────────────────  ───────  ────────  ──────────────────  ──────────────────────────────────\n"
+            );
+            for s in strategies {
+                let targets = if s.target_instruments.is_empty() {
+                    "any".to_string()
+                } else {
+                    s.target_instruments.join(",")
+                };
+                let params = s
+                    .parameters
+                    .iter()
+                    .map(|p| {
+                        if let (Some(mn), Some(mx)) = (p.min, p.max) {
+                            format!("{}: {} ({}..{})", p.name, p.default, mn, mx)
+                        } else {
+                            format!("{}: {}", p.name, p.default)
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                out.push_str(&format!(
+                    "{:<16}  {:<31}  {:<7}  {:<8}  {:<18}  {}\n",
+                    s.id, s.name, s.version, s.source.as_str(), targets, params
+                ));
+            }
+            Ok(CommandOutcome::StrategySuccess(out))
+        }
+        StrategyArgs::Run(run_args) => {
+            let params_map = if let Some(ref p_str) = run_args.params {
+                let parsed: BTreeMap<String, Decimal> = serde_json::from_str(p_str)
+                    .map_err(|e| CliError::Execution(format!("invalid JSON params: {e}")))?;
+                Some(parsed)
+            } else {
+                None
+            };
+
+            let report = StrategyBridge::run_backtest(
+                &run_args.name,
+                &run_args.symbol,
+                params_map.as_ref(),
+                run_args.capital,
+            )
+            .map_err(CliError::Execution)?;
+
+            if run_args.format == OutputFormat::Json {
+                let json_val = serde_json::json!({
+                    "strategy": run_args.name,
+                    "symbol": run_args.symbol,
+                    "capital": run_args.capital,
+                    "report": report
+                });
+                return Ok(CommandOutcome::StrategySuccess(
+                    serde_json::to_string_pretty(&json_val).unwrap_or_default(),
+                ));
+            }
+
+            let pnl_sign = if report.net_pnl >= Decimal::ZERO { "+" } else { "" };
+            let ret_sign = if report.total_return_pct >= Decimal::ZERO { "+" } else { "" };
+
+            let out = format!(
+                "┌────────────────────────────────────────────────────────────────────────┐\n                 │ Strategy Backtest Execution Report: {:<35}│\n                 │ Target: {:<20} | Capital: ₹{:<28}│\n                 ├────────────────────────────────────────────────────────────────────────┤\n                 │ Initial Capital:   ₹{:<18} Final Equity:     ₹{:<16}│\n                 │ Net PnL:           {}{:<17} Total Return:     {}{:<15}│\n                 │ Sharpe Ratio:      {:<19} Max Drawdown:     {:<15}%│\n                 │ Total Trades:      {:<19} Win Rate:         {:<15}%│\n                 │ Profit Factor:     {:<49}│\n                 └────────────────────────────────────────────────────────────────────────┘",
+                run_args.name,
+                run_args.symbol,
+                format!("{:.2}", run_args.capital),
+                format!("{:.2}", report.initial_capital),
+                format!("{:.2}", report.final_equity),
+                pnl_sign,
+                format!("{:.2}", report.net_pnl),
+                ret_sign,
+                format!("{:.2}%", report.total_return_pct),
+                format!("{:.2}", report.sharpe_ratio),
+                format!("{:.2}", report.max_drawdown_pct),
+                report.total_trades,
+                format!("{:.2}", report.win_rate_pct),
+                format!("{:.2}", report.profit_factor),
+            );
+
+            Ok(CommandOutcome::StrategySuccess(out))
+        }
+        StrategyArgs::Tune(tune_args) => {
+            let opt = StrategyBridge::tune_strategy(
+                &tune_args.name,
+                &tune_args.symbol,
+                tune_args.capital,
+                &tune_args.metric,
+            )
+            .map_err(CliError::Execution)?;
+
+            if tune_args.format == OutputFormat::Json {
+                let json_val = serde_json::json!({
+                    "strategy": tune_args.name,
+                    "symbol": tune_args.symbol,
+                    "metric": tune_args.metric,
+                    "capital": tune_args.capital,
+                    "optimization": opt
+                });
+                return Ok(CommandOutcome::StrategySuccess(
+                    serde_json::to_string_pretty(&json_val).unwrap_or_default(),
+                ));
+            }
+
+            let mut param_rows = String::new();
+            for (k, v_tuned) in &opt.tuned_params {
+                let v_def = opt.default_params.get(k).copied().unwrap_or(*v_tuned);
+                param_rows.push_str(&format!(
+                    "│ {:<18} {:<15} {:<15} {:<18} │\n",
+                    k, v_def, v_tuned, "search range"
+                ));
+            }
+
+            let dsr_pct = (opt.deflated_sharpe * Decimal::new(100, 0)).round_dp(2);
+
+            let out = format!(
+                "┌────────────────────────────────────────────────────────────────────────┐\n                 │ Strategy Parameter Tuning & Overfitting Audit: {:<23}│\n                 │ Target: {:<20} | Evaluated Trials: {:<22}│\n                 ├────────────────────────────────────────────────────────────────────────┤\n                 │ Parameter          Default Value   Tuned Value     Status             │\n                 │ ─────────────────  ──────────────  ──────────────  ────────────────── │\n                 {}                 ├────────────────────────────────────────────────────────────────────────┤\n                 │ Baseline Sharpe:   {:<15} Optimal Sharpe:  {:<19}│\n                 │ Max Drawdown:      {:<15}% Win Rate:        {:<18}%│\n                 │ Deflated Sharpe:   {:<49}│\n                 │ Verdict:           {:<49}│\n                 └────────────────────────────────────────────────────────────────────────┘",
+                tune_args.name,
+                tune_args.symbol,
+                opt.total_trials,
+                param_rows,
+                format!("{:.2}", opt.default_sharpe),
+                format!("{:.2}", opt.tuned_sharpe),
+                format!("{:.2}", opt.max_drawdown_pct),
+                format!("{:.2}", opt.win_rate_pct),
+                format!("{}% confidence (DSR >= 90% target)", dsr_pct),
+                opt.overfitting_verdict,
+            );
+
+            Ok(CommandOutcome::StrategySuccess(out))
+        }
+        StrategyArgs::Suggest(suggest_args) => {
+            let sugg = StrategyBridge::generate_trade_suggestion(
+                &suggest_args.name,
+                &suggest_args.symbol,
+                suggest_args.capital,
+                suggest_args.risk_pct,
+            )
+            .map_err(CliError::Execution)?;
+
+            if suggest_args.format == OutputFormat::Json {
+                return Ok(CommandOutcome::StrategySuccess(
+                    serde_json::to_string_pretty(&sugg).unwrap_or_default(),
+                ));
+            }
+
+            let tuned_summary = sugg
+                .tuned_params
+                .iter()
+                .map(|(k, v)| {
+                    let def_val = sugg.optimization.default_params.get(k).copied().unwrap_or(*v);
+                    format!("{k}={v} (def: {def_val})")
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            let dsr_pct = (sugg.optimization.deflated_sharpe * Decimal::new(100, 0)).round_dp(2);
+            let risk_per_unit = (sugg.signal.entry_price - sugg.signal.stop_loss).abs();
+            let risk_pct_trade = if sugg.signal.entry_price > Decimal::ZERO {
+                (risk_per_unit / sugg.signal.entry_price * Decimal::new(100, 0)).round_dp(2)
+            } else {
+                Decimal::ZERO
+            };
+
+            let out = format!(
+                "╔═══════════════════════════════════════════════════════════════════════════╗\n                 ║          VYAPAAR OPTIMAL TRADE SUGGESTION: {:<29} ║\n                 ╚═══════════════════════════════════════════════════════════════════════════╝\n                 \n                 1. PARAMETER TUNING & STATISTICAL AUDIT\n                    ────────────────────────────────────────────────────────────────────────\n                    • Tuned Parameters : {}\n                    • Performance      : Sharpe {:.2} (vs {:.2} def) | Max DD: {:.2}% | Win Rate: {:.2}%\n                    • Deflated Sharpe  : {}% confidence ({})\n                 \n                 2. OPTIMAL TRADE EXECUTION CARD\n                    ────────────────────────────────────────────────────────────────────────\n                    • Target Asset     : {}\n                    • Direction / Bias : {}\n                    • Trigger / Reason : {}\n                    • Entry Level      : ₹{:.2}\n                    • Stop Loss        : ₹{:.2} (-₹{:.2} / -{:.2}% / 2.0 ATR)\n                    • Target 1 (1:2 RR): ₹{:.2} (+₹{:.2} / +{:.2}%)\n                    • Target 2 (1:3 RR): ₹{:.2} (+₹{:.2} / +{:.2}%)\n                 \n                 3. CAPITAL ALLOCATION & RISK BUDGETING\n                    ────────────────────────────────────────────────────────────────────────\n                    • Available Capital: ₹{:.2}\n                    • Risk Budget ({:.1}%): ₹{:.2}\n                    • Recommended Size : {} units (Notional: ₹{:.2})\n                    • Margin Commitment: {:.2}% of capital\n                    • Est. Friction Fee: ₹{:.2} (STT, GST, SEBI Turnover, Stamp Duty)\n                    • Net Risk-Reward  : 1 : {:.2} (friction-adjusted)\n",
+                sugg.strategy.name.to_uppercase(),
+                tuned_summary,
+                sugg.optimization.tuned_sharpe,
+                sugg.optimization.default_sharpe,
+                sugg.optimization.max_drawdown_pct,
+                sugg.optimization.win_rate_pct,
+                dsr_pct,
+                sugg.optimization.overfitting_verdict,
+                sugg.symbol,
+                sugg.signal.bias.as_str(),
+                sugg.signal.reason,
+                sugg.signal.entry_price,
+                sugg.signal.stop_loss,
+                risk_per_unit,
+                risk_pct_trade,
+                sugg.signal.target_1,
+                (sugg.signal.target_1 - sugg.signal.entry_price).abs(),
+                ((sugg.signal.target_1 - sugg.signal.entry_price).abs() / sugg.signal.entry_price * Decimal::new(100, 0)).round_dp(2),
+                sugg.signal.target_2,
+                (sugg.signal.target_2 - sugg.signal.entry_price).abs(),
+                ((sugg.signal.target_2 - sugg.signal.entry_price).abs() / sugg.signal.entry_price * Decimal::new(100, 0)).round_dp(2),
+                sugg.sizing.account_capital,
+                sugg.sizing.risk_pct,
+                sugg.sizing.risk_amount,
+                sugg.sizing.quantity,
+                sugg.sizing.notional_value,
+                sugg.sizing.margin_utilization_pct,
+                sugg.statutory_charges.total_charges,
+                sugg.statutory_charges.net_risk_reward_ratio,
+            );
+
+            Ok(CommandOutcome::StrategySuccess(out))
+        }
+    }
 }

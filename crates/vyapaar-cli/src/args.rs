@@ -212,6 +212,73 @@ pub struct PurgeArgs {
     pub yes: bool,
 }
 
+
+/// Arguments for `vyapaar strategy run`.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct StrategyRunArgs {
+    /// Strategy name or manifest id.
+    pub name: String,
+    /// Target trading symbol.
+    #[arg(short, long, default_value = "NSE:NIFTY50-INDEX")]
+    pub symbol: String,
+    /// Parameter overrides as JSON (e.g. '{"fast_period":12}').
+    #[arg(long)]
+    pub params: Option<String>,
+    /// Capital allocated for backtest (INR).
+    #[arg(long, default_value = "1000000")]
+    pub capital: rust_decimal::Decimal,
+    /// Output format (text or json).
+    #[arg(long, value_enum, default_value = "text")]
+    pub format: OutputFormat,
+}
+
+/// Arguments for `vyapaar strategy tune`.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct StrategyTuneArgs {
+    /// Strategy name or manifest id to tune.
+    pub name: String,
+    /// Target trading symbol.
+    #[arg(short, long, default_value = "NSE:NIFTY50-INDEX")]
+    pub symbol: String,
+    /// Optimization objective metric (sharpe or pnl).
+    #[arg(long, default_value = "sharpe")]
+    pub metric: String,
+    /// Capital allocated for evaluation (INR).
+    #[arg(long, default_value = "1000000")]
+    pub capital: rust_decimal::Decimal,
+    /// Output format (text or json).
+    #[arg(long, value_enum, default_value = "text")]
+    pub format: OutputFormat,
+}
+
+/// Arguments for `vyapaar strategy suggest`.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct StrategySuggestArgs {
+    /// Strategy name or manifest id.
+    pub name: String,
+    /// Target trading symbol.
+    #[arg(short, long, default_value = "NSE:NIFTY50-INDEX")]
+    pub symbol: String,
+    /// Account capital (INR).
+    #[arg(long, default_value = "1000000")]
+    pub capital: rust_decimal::Decimal,
+    /// Percentage of account risked on trade (e.g. 1.0 for 1%).
+    #[arg(long, default_value = "1.0")]
+    pub risk_pct: rust_decimal::Decimal,
+    /// Output format (text or json).
+    #[arg(long, value_enum, default_value = "text")]
+    pub format: OutputFormat,
+}
+
+/// Arguments for `vyapaar strategy`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StrategyArgs {
+    List,
+    Run(StrategyRunArgs),
+    Tune(StrategyTuneArgs),
+    Suggest(StrategySuggestArgs),
+}
+
 /// The CLI subcommands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -244,6 +311,8 @@ pub enum Command {
     Purge(PurgeArgs),
     /// Print a system/environment health report.
     Health,
+    /// Manage, run, tune, and get trade suggestions for algorithmic strategies.
+    Strategy(StrategyArgs),
 }
 
 /// The parsed CLI arguments.
@@ -483,6 +552,11 @@ pub enum CliCommand {
     },
     /// Print a system/environment health report.
     Health,
+    /// Manage, run, tune, and get trade suggestions for algorithmic strategies.
+    Strategy {
+        #[command(subcommand)]
+        subcommand: Option<StrategySubcommand>,
+    },
 }
 
 /// Jobs subcommands.
@@ -677,6 +751,64 @@ pub enum McpSubcommand {
     },
 }
 
+/// Strategy subcommands.
+#[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
+pub enum StrategySubcommand {
+    /// List all discovered built-in and manifest strategies.
+    List,
+    /// Run a strategy backtest.
+    Run {
+        /// Strategy name or id.
+        name: String,
+        /// Target instrument symbol.
+        #[arg(short, long, default_value = "NSE:NIFTY50-INDEX")]
+        symbol: String,
+        /// Parameter overrides as JSON (e.g. '{"fast_period":12}').
+        #[arg(long)]
+        params: Option<String>,
+        /// Allocated capital.
+        #[arg(long, default_value = "1000000")]
+        capital: rust_decimal::Decimal,
+        /// Output format.
+        #[arg(long, value_enum, default_value = "text")]
+        format: OutputFormat,
+    },
+    /// Tune strategy parameters using grid search with overfitting guardrails.
+    Tune {
+        /// Strategy name or id.
+        name: String,
+        /// Target instrument symbol.
+        #[arg(short, long, default_value = "NSE:NIFTY50-INDEX")]
+        symbol: String,
+        /// Target optimization metric (sharpe or pnl).
+        #[arg(long, default_value = "sharpe")]
+        metric: String,
+        /// Allocated capital.
+        #[arg(long, default_value = "1000000")]
+        capital: rust_decimal::Decimal,
+        /// Output format.
+        #[arg(long, value_enum, default_value = "text")]
+        format: OutputFormat,
+    },
+    /// Tune strategy parameters and generate an optimal trade recommendation.
+    Suggest {
+        /// Strategy name or id.
+        name: String,
+        /// Target instrument symbol.
+        #[arg(short, long, default_value = "NSE:NIFTY50-INDEX")]
+        symbol: String,
+        /// Account capital.
+        #[arg(long, default_value = "1000000")]
+        capital: rust_decimal::Decimal,
+        /// Percentage of account to risk (e.g. 1.0 for 1%).
+        #[arg(long, default_value = "1.0")]
+        risk_pct: rust_decimal::Decimal,
+        /// Output format.
+        #[arg(long, value_enum, default_value = "text")]
+        format: OutputFormat,
+    },
+}
+
 impl From<Cli> for CliArgs {
     fn from(cli: Cli) -> Self {
         let log_level = resolve_log_level(cli.log_level, cli.verbose, cli.quiet);
@@ -781,6 +913,48 @@ impl From<Cli> for CliArgs {
             Some(CliCommand::Doctor { fix, json }) => Command::Doctor(DoctorArgs { fix, json }),
             Some(CliCommand::Purge { dry_run, yes }) => Command::Purge(PurgeArgs { dry_run, yes }),
             Some(CliCommand::Health) => Command::Health,
+            Some(CliCommand::Strategy { subcommand }) => Command::Strategy(match subcommand {
+                None | Some(StrategySubcommand::List) => StrategyArgs::List,
+                Some(StrategySubcommand::Run {
+                    name,
+                    symbol,
+                    params,
+                    capital,
+                    format,
+                }) => StrategyArgs::Run(StrategyRunArgs {
+                    name,
+                    symbol,
+                    params,
+                    capital,
+                    format,
+                }),
+                Some(StrategySubcommand::Tune {
+                    name,
+                    symbol,
+                    metric,
+                    capital,
+                    format,
+                }) => StrategyArgs::Tune(StrategyTuneArgs {
+                    name,
+                    symbol,
+                    metric,
+                    capital,
+                    format,
+                }),
+                Some(StrategySubcommand::Suggest {
+                    name,
+                    symbol,
+                    capital,
+                    risk_pct,
+                    format,
+                }) => StrategyArgs::Suggest(StrategySuggestArgs {
+                    name,
+                    symbol,
+                    capital,
+                    risk_pct,
+                    format,
+                }),
+            }),
         };
 
         Self {

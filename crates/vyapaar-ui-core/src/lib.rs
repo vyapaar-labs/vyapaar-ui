@@ -1,8 +1,8 @@
 //! # व्यापार・face vyapaar-ui-core
 //!
 //! Presentational primitives for the Vyapaar workstation: pure layout and
-//! rendering atoms/molecules, screener table primitives, and home dashboard
-//! primitives.
+//! rendering atoms/molecules, screener table primitives, home dashboard
+//! primitives, and strategy optimization / trade suggestion models.
 //!
 //! Contracts (migration-guide.md §1 and `vyapaar-ui/.agents/AGENTS.md`):
 //! - **Presentational purity**: atoms describe *layout/rendering* intent;
@@ -11,7 +11,7 @@
 //! - **Zero-floats**: prices, deltas, and ratios use `rust_decimal::Decimal`
 //!   (re-exported through `vyapaar_core`).
 //! - **Tests in `tests/`**: `ui_core_primitives_test.rs`,
-//!   `screener_primitives_test.rs`, `home_primitives_test.rs`.
+//!   `screener_primitives_test.rs`, `home_primitives_test.rs`, `strategy_primitives_test.rs`.
 
 pub mod algos;
 pub mod atoms;
@@ -19,6 +19,7 @@ pub mod backtest;
 pub mod home;
 pub mod portfolio;
 pub mod screener;
+pub mod strategy;
 
 pub use algos::{AlgoManagerViewModel, AlgoRow, AlgoStatus};
 pub use atoms::{
@@ -33,4 +34,10 @@ pub use portfolio::{
 pub use screener::{
     ScreenerColumn, ScreenerFilterChip, ScreenerRowModel, ScreenerSort, ScreenerSortOrder,
     ScreenerViewModel,
+};
+pub use strategy::{
+    BacktestReport, OptimizationResult, RiskSizing, StatutoryCharges, StrategyDescriptor,
+    StrategyParameterSpec, StrategySourceKind, TradeBias, TradeSignal, TradeSuggestion,
+    calculate_deflated_sharpe, calculate_max_drawdown, calculate_risk_sizing, calculate_sharpe,
+    calculate_statutory_charges,
 };
