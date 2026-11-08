@@ -971,21 +971,33 @@ fn run_strategy(args: &StrategyArgs) -> Result<CommandOutcome, CliError> {
             let pnl_sign = if report.net_pnl >= Decimal::ZERO { "+" } else { "" };
             let ret_sign = if report.total_return_pct >= Decimal::ZERO { "+" } else { "" };
 
+            let pnl_str = format!("{}{:.2}", pnl_sign, report.net_pnl);
+            let ret_str = format!("{}{:.2}%", ret_sign, report.total_return_pct);
+            let dd_str = format!("{:.2}%", report.max_drawdown_pct);
+            let win_str = format!("{:.2}%", report.win_rate_pct);
+
             let out = format!(
-                "┌────────────────────────────────────────────────────────────────────────┐\n                 │ Strategy Backtest Execution Report: {:<35}│\n                 │ Target: {:<20} | Capital: ₹{:<28}│\n                 ├────────────────────────────────────────────────────────────────────────┤\n                 │ Initial Capital:   ₹{:<18} Final Equity:     ₹{:<16}│\n                 │ Net PnL:           {}{:<17} Total Return:     {}{:<15}│\n                 │ Sharpe Ratio:      {:<19} Max Drawdown:     {:<15}%│\n                 │ Total Trades:      {:<19} Win Rate:         {:<15}%│\n                 │ Profit Factor:     {:<49}│\n                 └────────────────────────────────────────────────────────────────────────┘",
+"┌────────────────────────────────────────────────────────────────────────┐
+│ Strategy Backtest Execution Report: {:<35}│
+│ Target: {:<20} | Capital: ₹{:<30}│
+├────────────────────────────────────────────────────────────────────────┤
+│ Initial Capital:   ₹{:<14} Final Equity:     ₹{:<17}│
+│ Net PnL:           {:<16} Total Return:     {:<17}│
+│ Sharpe Ratio:      {:<16} Max Drawdown:     {:<17}│
+│ Total Trades:      {:<16} Win Rate:         {:<17}│
+│ Profit Factor:     {:<52}│
+└────────────────────────────────────────────────────────────────────────┘",
                 run_args.name,
                 run_args.symbol,
                 format!("{:.2}", run_args.capital),
                 format!("{:.2}", report.initial_capital),
                 format!("{:.2}", report.final_equity),
-                pnl_sign,
-                format!("{:.2}", report.net_pnl),
-                ret_sign,
-                format!("{:.2}%", report.total_return_pct),
+                pnl_str,
+                ret_str,
                 format!("{:.2}", report.sharpe_ratio),
-                format!("{:.2}", report.max_drawdown_pct),
+                dd_str,
                 report.total_trades,
-                format!("{:.2}", report.win_rate_pct),
+                win_str,
                 format!("{:.2}", report.profit_factor),
             );
 
@@ -1017,24 +1029,36 @@ fn run_strategy(args: &StrategyArgs) -> Result<CommandOutcome, CliError> {
             for (k, v_tuned) in &opt.tuned_params {
                 let v_def = opt.default_params.get(k).copied().unwrap_or(*v_tuned);
                 param_rows.push_str(&format!(
-                    "│ {:<18} {:<15} {:<15} {:<18} │\n",
+                    "│ {:<18}  {:<14}  {:<14}  {:<18} │\n",
                     k, v_def, v_tuned, "search range"
                 ));
             }
 
             let dsr_pct = (opt.deflated_sharpe * Decimal::new(100, 0)).round_dp(2);
+            let dsr_line = format!("{}% confidence (DSR >= 90% target)", dsr_pct);
 
             let out = format!(
-                "┌────────────────────────────────────────────────────────────────────────┐\n                 │ Strategy Parameter Tuning & Overfitting Audit: {:<23}│\n                 │ Target: {:<20} | Evaluated Trials: {:<22}│\n                 ├────────────────────────────────────────────────────────────────────────┤\n                 │ Parameter          Default Value   Tuned Value     Status             │\n                 │ ─────────────────  ──────────────  ──────────────  ────────────────── │\n                 {}                 ├────────────────────────────────────────────────────────────────────────┤\n                 │ Baseline Sharpe:   {:<15} Optimal Sharpe:  {:<19}│\n                 │ Max Drawdown:      {:<15}% Win Rate:        {:<18}%│\n                 │ Deflated Sharpe:   {:<49}│\n                 │ Verdict:           {:<49}│\n                 └────────────────────────────────────────────────────────────────────────┘",
+"┌────────────────────────────────────────────────────────────────────────┐
+│ Strategy Parameter Tuning & Overfitting Audit: {:<24}│
+│ Target: {:<20} | Evaluated Trials: {:<22}│
+├────────────────────────────────────────────────────────────────────────┤
+│ Parameter           Default Value   Tuned Value     Status             │
+│ ──────────────────  ──────────────  ──────────────  ────────────────── │
+{}├────────────────────────────────────────────────────────────────────────┤
+│ Baseline Sharpe:   {:<15} Optimal Sharpe:  {:<19}│
+│ Max Drawdown:      {:<15} Win Rate:        {:<19}│
+│ Deflated Sharpe:   {:<52}│
+│ Verdict:           {:<52}│
+└────────────────────────────────────────────────────────────────────────┘",
                 tune_args.name,
                 tune_args.symbol,
                 opt.total_trials,
                 param_rows,
                 format!("{:.2}", opt.default_sharpe),
                 format!("{:.2}", opt.tuned_sharpe),
-                format!("{:.2}", opt.max_drawdown_pct),
-                format!("{:.2}", opt.win_rate_pct),
-                format!("{}% confidence (DSR >= 90% target)", dsr_pct),
+                format!("{:.2}%", opt.max_drawdown_pct),
+                format!("{:.2}%", opt.win_rate_pct),
+                dsr_line,
                 opt.overfitting_verdict,
             );
 
@@ -1074,7 +1098,35 @@ fn run_strategy(args: &StrategyArgs) -> Result<CommandOutcome, CliError> {
             };
 
             let out = format!(
-                "╔═══════════════════════════════════════════════════════════════════════════╗\n                 ║          VYAPAAR OPTIMAL TRADE SUGGESTION: {:<29} ║\n                 ╚═══════════════════════════════════════════════════════════════════════════╝\n                 \n                 1. PARAMETER TUNING & STATISTICAL AUDIT\n                    ────────────────────────────────────────────────────────────────────────\n                    • Tuned Parameters : {}\n                    • Performance      : Sharpe {:.2} (vs {:.2} def) | Max DD: {:.2}% | Win Rate: {:.2}%\n                    • Deflated Sharpe  : {}% confidence ({})\n                 \n                 2. OPTIMAL TRADE EXECUTION CARD\n                    ────────────────────────────────────────────────────────────────────────\n                    • Target Asset     : {}\n                    • Direction / Bias : {}\n                    • Trigger / Reason : {}\n                    • Entry Level      : ₹{:.2}\n                    • Stop Loss        : ₹{:.2} (-₹{:.2} / -{:.2}% / 2.0 ATR)\n                    • Target 1 (1:2 RR): ₹{:.2} (+₹{:.2} / +{:.2}%)\n                    • Target 2 (1:3 RR): ₹{:.2} (+₹{:.2} / +{:.2}%)\n                 \n                 3. CAPITAL ALLOCATION & RISK BUDGETING\n                    ────────────────────────────────────────────────────────────────────────\n                    • Available Capital: ₹{:.2}\n                    • Risk Budget ({:.1}%): ₹{:.2}\n                    • Recommended Size : {} units (Notional: ₹{:.2})\n                    • Margin Commitment: {:.2}% of capital\n                    • Est. Friction Fee: ₹{:.2} (STT, GST, SEBI Turnover, Stamp Duty)\n                    • Net Risk-Reward  : 1 : {:.2} (friction-adjusted)\n",
+"╔═══════════════════════════════════════════════════════════════════════════╗
+║          VYAPAAR OPTIMAL TRADE SUGGESTION: {:<31}║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+1. PARAMETER TUNING & STATISTICAL AUDIT
+   ────────────────────────────────────────────────────────────────────────
+   • Tuned Parameters : {}
+   • Performance      : Sharpe {:.2} (vs {:.2} def) | Max DD: {:.2}% | Win Rate: {:.2}%
+   • Deflated Sharpe  : {}% confidence ({})
+
+2. OPTIMAL TRADE EXECUTION CARD
+   ────────────────────────────────────────────────────────────────────────
+   • Target Asset     : {}
+   • Direction / Bias : {}
+   • Trigger / Reason : {}
+   • Entry Level      : ₹{:.2}
+   • Stop Loss        : ₹{:.2} (-₹{:.2} / -{:.2}% / 2.0 ATR)
+   • Target 1 (1:2 RR): ₹{:.2} (+₹{:.2} / +{:.2}%)
+   • Target 2 (1:3 RR): ₹{:.2} (+₹{:.2} / +{:.2}%)
+
+3. CAPITAL ALLOCATION & RISK BUDGETING
+   ────────────────────────────────────────────────────────────────────────
+   • Available Capital: ₹{:.2}
+   • Risk Budget ({:.1}%): ₹{:.2}
+   • Recommended Size : {} units (Notional: ₹{:.2})
+   • Margin Commitment: {:.2}% of capital
+   • Est. Friction Fee: ₹{:.2} (STT, GST, SEBI Turnover, Stamp Duty)
+   • Net Risk-Reward  : 1 : {:.2} (friction-adjusted)
+",
                 sugg.strategy.name.to_uppercase(),
                 tuned_summary,
                 sugg.optimization.tuned_sharpe,
