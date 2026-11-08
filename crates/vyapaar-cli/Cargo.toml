@@ -22,6 +22,7 @@ vyapaar-highlight.workspace = true
 vyapaar-agent-core.workspace = true
 vyapaar-agent-chat.workspace = true
 vyapaar-agent-llm.workspace = true
+vyapaar-agent-chat-tools.workspace = true
 tokio = { workspace = true, features = ["full"] }
 futures.workspace = true
 rust_decimal.workspace = true

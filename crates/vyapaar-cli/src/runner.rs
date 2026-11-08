@@ -230,10 +230,15 @@ fn run_ask(
             .temperature
             .and_then(|t| rust_decimal::Decimal::try_from(t).ok());
 
+        let strategy_tools = vyapaar_agent_chat_tools::catalog::create_strategy_tools(None)
+            .into_iter()
+            .map(|t| t.spec().clone())
+            .collect::<Vec<_>>();
+
         let request = ChatRequest {
             messages: vec![ChatMessage::user(prompt)],
             system_prompt,
-            tools: Vec::new(),
+            tools: strategy_tools,
             temperature: temp_decimal,
             max_tokens: None,
         };
@@ -331,10 +336,15 @@ fn run_chat(
             }
 
             history.push(ChatMessage::user(prompt));
+            let strategy_tools = vyapaar_agent_chat_tools::catalog::create_strategy_tools(None)
+                .into_iter()
+                .map(|t| t.spec().clone())
+                .collect::<Vec<_>>();
+
             let request = ChatRequest {
                 messages: history.clone(),
                 system_prompt: args.system_prompt.clone(),
-                tools: Vec::new(),
+                tools: strategy_tools,
                 temperature: None,
                 max_tokens: None,
             };

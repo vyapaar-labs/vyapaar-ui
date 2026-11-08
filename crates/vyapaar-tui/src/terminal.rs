@@ -98,10 +98,15 @@ async fn run_loop(
             let tx = token_tx.clone();
 
             tokio::spawn(async move {
+                let strategy_tools = vyapaar_agent_chat_tools::catalog::create_strategy_tools(None)
+                    .into_iter()
+                    .map(|t| t.spec().clone())
+                    .collect::<Vec<_>>();
+
                 let req = ChatRequest {
                     messages: vec![ChatMessage::user(prompt)],
                     system_prompt: Some("You are Vyapaar, an intelligent quantitative finance and algorithmic trading assistant for Indian equities (NSE/BSE).".to_string()),
-                    tools: Vec::new(),
+                    tools: strategy_tools,
                     temperature: Some(Decimal::new(7, 1)),
                     max_tokens: Some(1024),
                 };
