@@ -26,9 +26,9 @@ vyapaar-core = { path = "../vyapaar-core" }
 # vyapaar-agent workspace.
 vyapaar-agent-core = { path = "../vyapaar-agent/crates/vyapaar-agent-core" }
 vyapaar-agent-chat = { path = "../vyapaar-agent/crates/vyapaar-agent-chat" }
+vyapaar-agent-chat-tools = { path = "../vyapaar-agent/crates/vyapaar-agent-chat-tools" }
 vyapaar-agent-llm = { path = "../vyapaar-agent/crates/vyapaar-agent-llm" }
 vyapaar-agent-prompt = { path = "../vyapaar-agent/crates/vyapaar-agent-prompt" }
-vyapaar-agent-chat-tools = { path = "../vyapaar-agent/crates/vyapaar-agent-chat-tools" }
 vyapaar-ui-core = { path = "crates/vyapaar-ui-core" }
 vyapaar-ui-assets = { path = "crates/vyapaar-ui-assets" }
 vyapaar-ui-charts = { path = "crates/vyapaar-ui-charts" }
@@ -76,6 +76,11 @@ strip = "debuginfo"
 opt-level = 1
 debug = false
 strip = "debuginfo"
+
+[profile.dbg]
+inherits = "dev"
+debug = 2
+strip = "none"
 
 [profile.release]
 opt-level = 3
