@@ -148,14 +148,19 @@ pub fn resolve_provider(
     }
 
     // 4. Default model file on disk
-    let default_relative = Path::new("models/smollm2-360m-instruct-q4_k_m.gguf");
-    let resolved = find_existing_path(default_relative);
-    if resolved.exists() {
-        let mut config = CandleGgufConfig::new(resolved);
-        if let Some(t) = temperature {
-            config = config.with_temperature(t);
+    let candidates = [
+        "models/SmolLM2-360M-Instruct-Q4_K_M.gguf",
+        "models/smollm2-360m-instruct-q4_k_m.gguf",
+    ];
+    for c in candidates {
+        let resolved = find_existing_path(Path::new(c));
+        if resolved.exists() {
+            let mut config = CandleGgufConfig::new(resolved);
+            if let Some(t) = temperature {
+                config = config.with_temperature(t);
+            }
+            return Ok(Some(Arc::new(CandleGgufProvider::new(config))));
         }
-        return Ok(Some(Arc::new(CandleGgufProvider::new(config))));
     }
 
     Ok(None)

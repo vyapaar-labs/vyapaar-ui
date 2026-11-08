@@ -170,7 +170,7 @@ fn run_ask_fails_with_not_wired_without_provider() {
         command: Command::Ask(AskArgs::new("hello")),
         ..Default::default()
     };
-    assert_eq!(run(&cli), Err(CliError::NotWired("vyapaar ask".into())));
+    assert_eq!(run_with_provider(&cli, None), Err(CliError::NotWired("vyapaar ask".into())));
 }
 
 #[test]

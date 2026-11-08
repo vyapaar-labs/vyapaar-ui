@@ -73,10 +73,17 @@ async fn run_loop(
             match update {
                 AgentStreamUpdate::Token(delta) => {
                     if let Some(last) = app.chat.last_mut() {
-                        last.text.push_str(&delta);
+                        let clean = delta.replace("<|im_end|>", "").replace("<|im_start|>", "");
+                        last.text.push_str(&clean);
                     }
                 }
                 AgentStreamUpdate::Finished => {
+                    if let Some(last) = app.chat.last_mut() {
+                        let trimmed = last.text.trim();
+                        if last.text != trimmed {
+                            last.text = trimmed.to_string();
+                        }
+                    }
                     app.is_loading = false;
                 }
                 AgentStreamUpdate::Error(err) => {
