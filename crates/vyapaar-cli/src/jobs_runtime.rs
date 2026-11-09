@@ -873,8 +873,8 @@ fn job_manifest(
 ///
 /// Journal contract (deterministic payloads, timestamps only in the manifest):
 /// 1. `run.queued`   — admission snapshot (`Pending`).
-/// 2. `run.started`  — manifest flips to `Running` via [`write_manifest`] —
-///                     the crash sweeper treats this shape as interrupted.
+/// 2. `run.started`  — manifest flips to `Running` via `write_manifest`; the
+///    crash sweeper treats that shape as interrupted.
 /// 3. `run.result`   — the full engine report (or `run.failed`).
 /// 4. `run.finalized` — journal files flushed (gravity of finalize).
 fn execute_in_journal(journals_dir: PathBuf, spec: JobSpec, trigger: String) -> JournalOutcome {

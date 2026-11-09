@@ -643,7 +643,7 @@ pub fn run_jobs_with_home(args: &JobsArgs, home: &Path) -> Result<CommandOutcome
                         format!("{strategy} on {symbol} @ ₹{capital}")
                     }
                     (Some(strategy), Some(symbol), None) => format!("{strategy} on {symbol}"),
-                    (Some(strategy), None, _) => format!("{strategy}"),
+                    (Some(strategy), None, _) => strategy.to_string(),
                     _ => "none (goal-only; `jobs run` requires a strategy)".to_string(),
                 }
             );

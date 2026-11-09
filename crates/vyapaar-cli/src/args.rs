@@ -104,6 +104,9 @@ pub struct ScanArgs {
 
 /// Arguments for `vyapaar jobs`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+// Clap command structs are built once per dispatch; boxing the Add field-set
+// would ripple through `to_command`/tests without a real gain.
+#[allow(clippy::large_enum_variant)]
 pub enum JobsArgs {
     Add {
         goal: String,
@@ -576,6 +579,7 @@ pub enum CliCommand {
 
 /// Jobs subcommands.
 #[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum JobsSubcommand {
     /// Add a new autonomous scheduled research job.
     Add {

@@ -3,7 +3,7 @@
 //!
 //! All tests run in isolated `TempDir` homes; nothing touches `~/.vyapaar`.
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use chrono::{Duration, Utc};
 use rust_decimal::Decimal;
@@ -49,7 +49,7 @@ fn add_request(goal: &str, schedule: Option<&str>) -> AddRequest {
 /// Rewinds a job's `created_at` so its `* * * * *` schedule is past-due
 /// deterministically (a freshly created cron job fires on the next minute
 /// boundary, which would make the tick racy).
-fn seed_registered_ago(home: &PathBuf, spec_id: uuid::Uuid, ago: Duration) {
+fn seed_registered_ago(home: &Path, spec_id: uuid::Uuid, ago: Duration) {
     let mut registry = FileJobRegistry::load_or_create(home.join("jobs.json")).unwrap();
     let job = registry.get_job_mut(&spec_id).unwrap();
     job.created_at = Utc::now() - ago;
