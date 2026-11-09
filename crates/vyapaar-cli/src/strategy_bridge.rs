@@ -225,7 +225,29 @@ pub fn render_suggestion_card(sugg: &TradeSuggestion) -> String {
         .collect::<Vec<_>>()
         .join(", ");
 
-    let dsr_pct = (sugg.optimization.deflated_sharpe * Decimal::new(100, 0)).round_dp(2);
+    let val_section = if let Some(ref val) = sugg.optimization.validation {
+        let wf_str = val.walk_forward.as_ref().map(|w| format!("WFE: {:.1}% ({})", (w.wfe * Decimal::new(100, 0)).round_dp(1), if w.passed { "PASS" } else { "FAIL" })).unwrap_or_else(|| "N/A".to_string());
+        let hold_str = val.holdout.as_ref().map(|h| format!("Holdout Ret: {:.1}% ({})", (h.retention_ratio * Decimal::new(100, 0)).round_dp(1), if h.passed { "PASS" } else { "FAIL" })).unwrap_or_else(|| "N/A".to_string());
+        let mc_str = val.monte_carlo.as_ref().map(|m| format!("MC DD95: {:.1}% ({})", (m.drawdown_95 * Decimal::new(100, 0)).round_dp(1), if m.passed { "PASS" } else { "FAIL" })).unwrap_or_else(|| "N/A".to_string());
+        let cost_str = val.cost_stress.as_ref().map(|c| format!("2x Sharpe: {:.2} ({})", c.stress_2x_sharpe, if c.passed { "PASS" } else { "FAIL" })).unwrap_or_else(|| "N/A".to_string());
+        format!(
+            "4. SIX-GATE OVERFITTING AUDIT BLOCK (GAP-0002)
+   ────────────────────────────────────────────────────────────────────────
+   • Overall Verdict  : {}
+   • Walk-Forward     : {}
+   • Holdout Retention: {}
+   • Monte Carlo Tail : {}
+   • Cost-Stress (2x) : {}
+",
+            if val.passed { "PASSED (All 6 Gates Clean)" } else { "FAILED / WARNINGS PRESENT" },
+            wf_str,
+            hold_str,
+            mc_str,
+            cost_str,
+        )
+    } else {
+        String::new()
+    };
     let risk_per_unit = (sugg.signal.entry_price - sugg.signal.stop_loss).abs();
     let risk_pct_trade = if sugg.signal.entry_price > Decimal::ZERO {
         (risk_per_unit / sugg.signal.entry_price * Decimal::new(100, 0)).round_dp(2)
@@ -246,6 +268,8 @@ pub fn render_suggestion_card(sugg: &TradeSuggestion) -> String {
     } else {
         Decimal::ZERO
     };
+
+    let dsr_pct = (sugg.optimization.deflated_sharpe * Decimal::new(100, 0)).round_dp(2);
 
     format!(
         "╔═══════════════════════════════════════════════════════════════════════════╗
@@ -276,6 +300,8 @@ pub fn render_suggestion_card(sugg: &TradeSuggestion) -> String {
    • Margin Commitment: {:.2}% of capital
    • Est. Friction Fee: ₹{:.2} (STT, GST, SEBI Turnover, Stamp Duty)
    • Net Risk-Reward  : 1 : {:.2} (friction-adjusted)
+
+{}
 ",
         sugg.strategy.name.to_uppercase(),
         tuned_summary,
@@ -306,5 +332,6 @@ pub fn render_suggestion_card(sugg: &TradeSuggestion) -> String {
         sugg.sizing.margin_utilization_pct,
         sugg.statutory_charges.total_charges,
         sugg.statutory_charges.net_risk_reward_ratio,
+        val_section,
     )
 }

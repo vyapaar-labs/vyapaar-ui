@@ -14,6 +14,8 @@ use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub use vyapaar_core::analytics::ValidationBlock;
+
 /// Origin source of a strategy definition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -180,6 +182,9 @@ pub struct OptimizationResult {
     pub total_trials: usize,
     /// Overfitting audit diagnosis (e.g. "Low Overfitting Risk", "Overfitted").
     pub overfitting_verdict: String,
+    /// Full six-gate statistical validation block (DSR, PBO, walk-forward,
+    /// holdout, Monte Carlo, cost-stress). Present when the audit was run.
+    pub validation: Option<ValidationBlock>,
 }
 
 /// Trade direction / intent.
@@ -895,6 +900,20 @@ impl StrategyBridge {
         }
         .to_string();
 
+        let validation = {
+            let best_returns =
+                Self::simulate_strategy_returns(&strategy.id, &best_params, &bars, capital);
+            if best_returns.len() >= 20 {
+                Some(ValidationBlock::evaluate_backtest(
+                    &best_returns,
+                    best_report.sharpe_ratio,
+                    total_trials,
+                ))
+            } else {
+                None
+            }
+        };
+
         Ok(OptimizationResult {
             strategy_id: strategy.id,
             default_params,
@@ -906,6 +925,7 @@ impl StrategyBridge {
             win_rate_pct: best_report.win_rate_pct,
             total_trials,
             overfitting_verdict,
+            validation,
         })
     }
 
@@ -1221,6 +1241,82 @@ impl StrategyBridge {
             .collect();
 
         (report, spark)
+    }
+
+    /// Returns the per-period returns series from a simulation run.
+    /// Used for ValidationBlock audit in tune_strategy.
+    pub(crate) fn simulate_strategy_returns(
+        strategy_id: &str,
+        params: &BTreeMap<String, Decimal>,
+        bars: &[MarketBar],
+        _capital: Decimal,
+    ) -> Vec<Decimal> {
+        // Inline the simulation to extract returns without computing full metrics.
+        if bars.len() < 10 {
+            return Vec::new();
+        }
+
+        let mut in_position = false;
+
+        let fast_period = params
+            .get("fast_period")
+            .or_else(|| params.get("entry_period"))
+            .and_then(|d| d.to_usize())
+            .unwrap_or(10);
+        let slow_period = params
+            .get("slow_period")
+            .or_else(|| params.get("exit_period"))
+            .and_then(|d| d.to_usize())
+            .unwrap_or(20);
+
+        let mut returns = Vec::new();
+
+        for i in slow_period..bars.len() {
+            let close = bars[i].close;
+            let prev_close = bars[i - 1].close;
+
+            let trigger_buy = match strategy_id {
+                "turtle_breakout" => {
+                    let lookback = fast_period.min(i);
+                    let max_high = bars[i - lookback..i]
+                        .iter()
+                        .map(|b| b.high)
+                        .max()
+                        .unwrap_or(close);
+                    close > max_high
+                }
+                "rsi_reversal" => bars[i].close > bars[i].open && bars[i - 1].close <= bars[i - 1].open,
+                "sma_crossover" => {
+                    let fast_slice = &bars[i - fast_period..=i];
+                    let slow_slice = &bars[i - slow_period..=i];
+                    let fast_ma: Decimal =
+                        fast_slice.iter().map(|b| b.close).sum::<Decimal>()
+                            / Decimal::from(fast_slice.len());
+                    let slow_ma: Decimal =
+                        slow_slice.iter().map(|b| b.close).sum::<Decimal>()
+                            / Decimal::from(slow_slice.len());
+                    fast_ma > slow_ma
+                }
+                _ => true,
+            };
+
+            let trigger_exit = !trigger_buy && in_position;
+
+            if !in_position && trigger_buy {
+                in_position = true;
+            } else if in_position && trigger_exit {
+                in_position = false;
+            }
+
+            let daily_ret = if prev_close > Decimal::ZERO {
+                (close - prev_close) / prev_close
+            } else {
+                Decimal::ZERO
+            };
+            returns.push(daily_ret);
+        }
+
+        returns
     }
 
 }
