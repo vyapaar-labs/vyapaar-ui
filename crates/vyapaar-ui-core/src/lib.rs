@@ -37,7 +37,7 @@ pub use screener::{
 };
 pub use strategy::{
     BacktestReport, OptimizationResult, RiskSizing, StatutoryCharges, StrategyDescriptor,
-    StrategyParameterSpec, StrategySourceKind, TradeBias, TradeSignal, TradeSuggestion,
+    StrategyParameterSpec, StrategySourceKind, TradeBias, TradeRow, TradeSignal, TradeSuggestion,
     calculate_deflated_sharpe, calculate_max_drawdown, calculate_risk_sizing, calculate_sharpe,
     calculate_statutory_charges,
 };

@@ -1000,10 +1000,11 @@ fn execute_in_journal(journals_dir: PathBuf, spec: JobSpec, trigger: String) -> 
                 Some(finished_at),
                 None,
             );
-            // stand-in for vyapaar-ui gap 0002: ui-core's BacktestReport does not
-            // expose per-trade rows, so `trades.json` records the aggregate count
-            // the engine can honor.
-            let trades = serde_json::json!({"total_trades": report.total_trades});
+            // Gap 0002 closed: `BacktestReport` now carries per-trade rows, so
+            // `trades.json` journals the serialized row list (replayable
+            // tax-lot evidence) instead of only the aggregate count. Rows are
+            // kept `Decimal`-only — zero floats.
+            let trades = serde_json::to_value(&report.trades).unwrap_or_default();
             if writer
                 .finalize_value(&final_manifest, &trades, &report_value)
                 .is_err()

@@ -20,6 +20,7 @@ pub mod args;
 pub mod backtest_gen;
 pub mod jobs_runtime;
 pub mod runner;
+pub mod scan;
 pub mod strategy_bridge;
 
 pub use args::{

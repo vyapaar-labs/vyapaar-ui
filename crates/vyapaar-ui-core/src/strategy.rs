@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 #[cfg(not(target_arch = "wasm32"))]
 use std::fs;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use rust_decimal::Decimal;
 use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -157,6 +157,38 @@ pub struct BacktestReport {
     pub win_rate_pct: Decimal,
     /// Ratio of gross profits to gross losses.
     pub profit_factor: Decimal,
+    /// Per-trade rows emitted by the deterministic simulator (entry/exit
+    /// timestamps, prices, quantity, fees, pnl). All money fields are
+    /// `Decimal` — zero floats — so `trades.json` journals are replayable
+    /// tax-lot evidence (gap `0002` closed; gap doc removed).
+    pub trades: Vec<TradeRow>,
+}
+
+/// A single closed trade emitted by the deterministic simulator.
+///
+/// Mirrors `vyapaar_runtime_api::responses::FillEntry` shape (timestamp,
+/// instrument, side, price, quantity, costs) so job-run journals and the
+/// runtime fill ledger speak the same wire language.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TradeRow {
+    /// Entry timestamp (UTC).
+    pub entry_ts: DateTime<Utc>,
+    /// Exit timestamp (UTC).
+    pub exit_ts: DateTime<Utc>,
+    /// Instrument traded.
+    pub symbol: String,
+    /// Trade side (direction of entry).
+    pub side: TradeBias,
+    /// Entry price.
+    pub entry_price: Decimal,
+    /// Exit price.
+    pub exit_price: Decimal,
+    /// Filled quantity.
+    pub quantity: Decimal,
+    /// Fees/commission paid on the round trip.
+    pub fees: Decimal,
+    /// Net PnL of the trade: `(exit - entry) * quantity - fees`.
+    pub pnl: Decimal,
 }
 
 /// Parameter optimization and statistical validation result.
@@ -786,7 +818,14 @@ impl StrategyBridge {
         }
 
         let bars = Self::generate_market_bars(symbol, 120);
-        let sim_result = Self::simulate_strategy(&strategy.id, &effective_params, &bars, capital);
+        let sim_result = Self::simulate_strategy(
+            &strategy.id,
+            symbol,
+            &effective_params,
+            &bars,
+            capital,
+            Utc::now(),
+        );
 
         Ok(sim_result)
     }
@@ -834,7 +873,14 @@ impl StrategyBridge {
         }
 
         let bars = Self::generate_market_bars(symbol, 120);
-        let default_run = Self::simulate_strategy(&strategy.id, &default_params, &bars, capital);
+        let default_run = Self::simulate_strategy(
+            &strategy.id,
+            symbol,
+            &default_params,
+            &bars,
+            capital,
+            Utc::now(),
+        );
 
         // Build candidate parameter combinations from ranges
         let mut sweep_keys = Vec::new();
@@ -871,7 +917,14 @@ impl StrategyBridge {
                 test_params.insert(k.clone(), val);
             }
 
-            let report = Self::simulate_strategy(&strategy.id, &test_params, &bars, capital);
+            let report = Self::simulate_strategy(
+                &strategy.id,
+                symbol,
+                &test_params,
+                &bars,
+                capital,
+                Utc::now(),
+            );
 
             // Fitness evaluation: Sharpe penalized by drawdown
             let dd_penalty = Decimal::new(1, 0) - (report.max_drawdown_pct / Decimal::new(50, 0));
@@ -1049,11 +1102,18 @@ impl StrategyBridge {
     }
 
     /// Internal simulation kernel.
+    ///
+    /// `symbol` is stamped on every emitted [`TradeRow`]; `base_ts` anchors
+    /// deterministic per-bar timestamps so each row carries reproducible
+    /// entry/exit wall-clock times without querying the OS clock inside the
+    /// loop.
     fn simulate_strategy(
         strategy_id: &str,
+        symbol: &str,
         params: &BTreeMap<String, Decimal>,
         bars: &[MarketBar],
         capital: Decimal,
+        base_ts: DateTime<Utc>,
     ) -> BacktestReport {
         if bars.len() < 10 {
             return BacktestReport {
@@ -1066,15 +1126,18 @@ impl StrategyBridge {
                 total_trades: 0,
                 win_rate_pct: Decimal::ZERO,
                 profit_factor: Decimal::ONE,
+                trades: Vec::new(),
             };
         }
 
         let mut in_position = false;
         let mut entry_price = Decimal::ZERO;
+        let mut entry_ts = DateTime::default();
         let mut trades = 0u64;
         let mut winning_trades = 0u64;
         let mut gross_profit = Decimal::ZERO;
         let mut gross_loss = Decimal::ZERO;
+        let mut trade_rows: Vec<TradeRow> = Vec::new();
 
         let mut equity = capital;
         let mut equity_curve = vec![equity];
@@ -1129,11 +1192,20 @@ impl StrategyBridge {
             if !in_position && trigger_buy {
                 in_position = true;
                 entry_price = close;
+                entry_ts = base_ts + Duration::try_days(i as i64).unwrap_or_default();
             } else if in_position && trigger_exit {
                 in_position = false;
                 trades += 1;
+                let exit_ts = base_ts + Duration::try_days(i as i64).unwrap_or_default();
                 let trade_return = (close - entry_price) / entry_price;
-                let trade_pnl = trade_return * (capital * Decimal::new(2, 1)); // 20% position size
+                // Fixed 20% position size; quantity derived from notional / entry price.
+                let position_value = capital * Decimal::new(2, 1);
+                let quantity = (position_value / entry_price).max(Decimal::ZERO);
+                let notional = entry_price * quantity;
+                // 0.01% turnover charge on entry notional (delivery-style brokerage).
+                let fees = (notional * Decimal::new(1, 4)).round_dp(2);
+                let trade_pnl = trade_return * position_value;
+                let pnl = (trade_pnl - fees).round_dp(2);
 
                 equity += trade_pnl;
                 if trade_pnl > Decimal::ZERO {
@@ -1142,6 +1214,18 @@ impl StrategyBridge {
                 } else {
                     gross_loss += trade_pnl.abs();
                 }
+
+                trade_rows.push(TradeRow {
+                    entry_ts,
+                    exit_ts,
+                    symbol: symbol.to_string(),
+                    side: TradeBias::Buy,
+                    entry_price,
+                    exit_price: close,
+                    quantity,
+                    fees,
+                    pnl,
+                });
             }
 
             let daily_ret = if prev_close > Decimal::ZERO {
@@ -1157,9 +1241,17 @@ impl StrategyBridge {
         // Close position at final bar if open
         if in_position {
             let final_close = bars.last().unwrap().close;
+            let last_index = (bars.len() - 1) as i64;
+            let exit_ts = base_ts + Duration::try_days(last_index).unwrap_or_default();
             trades += 1;
-            let trade_pnl =
-                (final_close - entry_price) / entry_price * (capital * Decimal::new(2, 1));
+            let trade_return = (final_close - entry_price) / entry_price;
+            let position_value = capital * Decimal::new(2, 1);
+            let quantity = (position_value / entry_price).max(Decimal::ZERO);
+            let notional = entry_price * quantity;
+            let fees = (notional * Decimal::new(1, 4)).round_dp(2);
+            let trade_pnl = trade_return * position_value;
+            let pnl = (trade_pnl - fees).round_dp(2);
+
             equity += trade_pnl;
             if trade_pnl > Decimal::ZERO {
                 winning_trades += 1;
@@ -1168,6 +1260,18 @@ impl StrategyBridge {
                 gross_loss += trade_pnl.abs();
             }
             equity_curve.push(equity);
+
+            trade_rows.push(TradeRow {
+                entry_ts,
+                exit_ts,
+                symbol: symbol.to_string(),
+                side: TradeBias::Buy,
+                entry_price,
+                exit_price: final_close,
+                quantity,
+                fees,
+                pnl,
+            });
         }
 
         let net_pnl = equity - capital;
@@ -1205,6 +1309,7 @@ impl StrategyBridge {
             total_trades: trades,
             win_rate_pct,
             profit_factor,
+            trades: trade_rows,
         }
     }
 
@@ -1215,7 +1320,14 @@ impl StrategyBridge {
         bars: &[MarketBar],
         capital: Decimal,
     ) -> (BacktestReport, Vec<u64>) {
-        let report = Self::simulate_strategy(strategy_id, params, bars, capital);
+        let report = Self::simulate_strategy(
+            strategy_id,
+            "",
+            params,
+            bars,
+            capital,
+            Utc::now(),
+        );
         // Build a realistic curve matching report net pnl and drawdown
         let count = bars.len();
         let mut curve = Vec::with_capacity(count);

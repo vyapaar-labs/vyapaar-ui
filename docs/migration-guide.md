@@ -70,14 +70,17 @@ WASM/native isolation follow the mapping table above exactly.
   vyapaar-ui-app --target wasm32-unknown-unknown` is green.
 - **`ScreenerFilterChip` lives in `vyapaar-ui-core`** (presentational), not
   `vyapaar-core`; the canonical filter is `ScreenerFilterPredicate`.
-- **`Ask`/`Scan` CLI commands return `NotWired`** until `vyapaar-agent` /
-  `vyapaar-market` screener APIs land — deliberately not faked
-  (`docs/gaps/0001-cli-ask-scan-not-wired.md`).
+- **`Ask`/`Scan` CLI commands are wired**: `Ask` streams LLM answers via
+  `vyapaar-agent-llm` (`CandleGgufProvider` / `OpenAiProvider`); `Scan`
+  evaluates a `vyapaar_core::screener::ScreenerScanRequest` against an
+  in-memory universe through `vyapaar_ui_api_wasm::screener::apply_scan`
+  (gap `0001` closed; gap doc removed).
 - **Screener canonicality (Layer 5)**: the UI builds only against
   `vyapaar_core::screener` wire contracts (evaluated by `apply_scan`); the
   `vyapaar-market-indicators::screener` module is a standalone simplified
   duplicate not used by `vyapaar-ui` or `vyapaar-agent` (resolved in
   `docs/plans/0005` §2 item 2).
 - **Remaining follow-up** (out of tier-5 gate scope): real Leptos view layer
-  for `vyapaar-ui-app` (state models are in place), wiring `vyapaar-cli
-  ask/scan` to backends (gap `0001`), and TUI `run()` event loop.
+  for `vyapaar-ui-app` (state models are in place), replacing the `scan`
+  fixture universe with a live `vyapaar-runtime-api-rest`
+  `GET /screener/scan` response, and TUI `run()` event loop.

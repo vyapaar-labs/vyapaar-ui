@@ -1,6 +1,11 @@
 # 0001 — Building `vyapaar-cli` / `vyapaar-tui` / `vyapaar-highlight` from the `artha` design work
 
-> **Status**: handoff — written by one agent, intended to be picked up and executed by another.
+> **Status**: implemented — crate build-out complete and verified (`cargo check --workspace --profile prod` green, `cargo test --workspace --profile prod` 275 passed, clippy/fmt clean).
+> **What was built**: `vyapaar-highlight` (zero-I/O `Language`/`HighlightSpan`/`highlight_code` lexer), `vyapaar-tui` (`TuiApp`, `ActiveTab{Screener,Portfolio,Orders,AgentChat}`, `run_terminal` crossterm event loop), `vyapaar-cli` (`CliArgs`/`Command` dispatch + `run` runner; Ask/Chat/Tui/Health wired; Jobs/Strategy/Verify/etc. implemented).
+> **Residual, tracked separately**: CLI `scan` is wired to the canonical screener
+> (`crates/vyapaar-cli/src/scan.rs`, `CommandOutcome::ScanResults`); gap `0001`
+> closed (gap doc removed). Real `AgentChat`/`Ask` wiring to `vyapaar-agent` is
+> blocked upstream on the `vyapaar-agent` port landing.
 > **Depends on reading**: `vyapaar-ui/docs/migration-guide.md`, `vyapaar-agent/docs/migration-guide.md`,
 > `vyapaar-market/docs/migration-guide.md`, `vyapaar-runtime/docs/migration-guide.md`, and the
 > `artha` workspace referenced throughout this doc.

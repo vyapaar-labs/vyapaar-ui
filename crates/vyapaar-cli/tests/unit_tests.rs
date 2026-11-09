@@ -4,6 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use rust_decimal::Decimal;
 use vyapaar_agent_llm::ScriptedFakeLlm;
 use vyapaar_cli::args::{
     AskArgs, ChatArgs, Cli, CliArgs, CliCommand, Command, DoctorArgs, JobsArgs, LogLevel,
@@ -11,6 +12,8 @@ use vyapaar_cli::args::{
     SkillsArgs, VerifyArgs, resolve_log_level,
 };
 use vyapaar_cli::runner::{CliError, CommandOutcome, run, run_jobs_with_home, run_with_provider};
+use vyapaar_cli::scan::{parse_query, scan_universe};
+use vyapaar_core::screener::{FilterOp, ScreenerScanRequest};
 
 #[test]
 fn parse_cli_roundtrip_tui() {
@@ -219,14 +222,113 @@ fn run_ask_json_format() {
 }
 
 #[test]
-fn run_scan_fails_with_not_wired() {
+fn run_scan_returns_matching_rows() {
+    // Fixture: RELIANCE pe=25 roe=15, TCS pe=30 roe=20, INFY pe=28 roe=18,
+    // HDFCBANK pe=22 roe=12. Only HDFCBANK (pe=22) satisfies pe<25.
     let cli = CliArgs {
         command: Command::Scan(ScanArgs {
-            query: "pe<20".into(),
+            query: "pe<25".into(),
         }),
         ..Default::default()
     };
-    assert_eq!(run(&cli), Err(CliError::NotWired("vyapaar scan".into())));
+    match run(&cli).unwrap() {
+        CommandOutcome::ScanResults { rows } => {
+            assert_eq!(rows, 1, "expected only HDFCBANK under pe<25");
+        }
+        other => panic!("expected ScanResults, got {other:?}"),
+    }
+}
+
+#[test]
+fn run_scan_returns_zero_rows_when_no_match() {
+    let cli = CliArgs {
+        command: Command::Scan(ScanArgs {
+            query: "pe<5".into(),
+        }),
+        ..Default::default()
+    };
+    match run(&cli).unwrap() {
+        CommandOutcome::ScanResults { rows } => {
+            assert_eq!(rows, 0);
+        }
+        other => panic!("expected ScanResults, got {other:?}"),
+    }
+}
+
+#[test]
+fn run_scan_compound_and_query() {
+    // roe>15 and pe<30: INFY (roe=18, pe=28) only -> 1 row.
+    let cli = CliArgs {
+        command: Command::Scan(ScanArgs {
+            query: "roe>15 and pe<30".into(),
+        }),
+        ..Default::default()
+    };
+    match run(&cli).unwrap() {
+        CommandOutcome::ScanResults { rows } => {
+            assert_eq!(rows, 1);
+        }
+        other => panic!("expected ScanResults, got {other:?}"),
+    }
+}
+
+#[test]
+fn run_scan_rejects_empty_query() {
+    let cli = CliArgs {
+        command: Command::Scan(ScanArgs { query: "".into() }),
+        ..Default::default()
+    };
+    assert_eq!(
+        run(&cli),
+        Err(CliError::Execution("query cannot be empty".to_string()))
+    );
+}
+
+#[test]
+fn scan_parse_single_predicate() {
+    let req: ScreenerScanRequest = parse_query("pe<25").unwrap();
+    assert_eq!(req.filters.predicates.len(), 1);
+    let p = &req.filters.predicates[0];
+    assert_eq!(p.metric.0.metric, "pe");
+    assert!(matches!(p.op, FilterOp::Lt));
+    assert_eq!(p.value, Decimal::from(25));
+    assert_eq!(p.value_upper, None);
+}
+
+#[test]
+fn scan_parse_between() {
+    let req: ScreenerScanRequest = parse_query("pe between 10 30").unwrap();
+    let p = &req.filters.predicates[0];
+    assert_eq!(p.metric.0.metric, "pe");
+    assert!(matches!(p.op, FilterOp::Between));
+    assert_eq!(p.value, Decimal::from(10));
+    assert_eq!(p.value_upper, Some(Decimal::from(30)));
+}
+
+#[test]
+fn scan_parse_compound_and() {
+    let req: ScreenerScanRequest = parse_query("roe>15 and pe<30").unwrap();
+    assert_eq!(req.filters.predicates.len(), 2);
+    assert!(req.filters.match_all);
+    assert!(matches!(req.filters.predicates[0].op, FilterOp::Gt));
+    assert!(matches!(req.filters.predicates[1].op, FilterOp::Lt));
+}
+
+#[test]
+fn scan_apply_matching_rows() {
+    let req = parse_query("pe<25").unwrap();
+    let resp = vyapaar_ui_api_wasm::screener::apply_scan(&scan_universe(), &req).unwrap();
+    assert_eq!(resp.rows.len(), 1);
+    assert_eq!(resp.rows[0].instrument.symbol, "HDFCBANK");
+    assert_eq!(resp.rows[0].instrument.exchange, vyapaar_core::types::Exchange::Nse);
+}
+
+#[test]
+fn scan_apply_no_match() {
+    let req = parse_query("pe<5").unwrap();
+    let resp = vyapaar_ui_api_wasm::screener::apply_scan(&scan_universe(), &req).unwrap();
+    assert_eq!(resp.rows.len(), 0);
+    assert_eq!(resp.total_matched, 0);
 }
 
 #[test]

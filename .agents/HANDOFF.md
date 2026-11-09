@@ -1,7 +1,9 @@
 # `vyapaar-ui` — Inter-Agent Handoff (Layer 5)
 
-> Updated: 2026-11-09 — PLAN-0001 Stage 4 (CLI & agent jobs unification) complete
-> alongside the earlier Layer 5 / Tier 5 work below.
+> Updated: 2026-11-09 — PLAN-0001 Stage 4 (CLI & agent jobs unification) complete;
+> `docs/plans` and `docs/gaps` reconciled against the green tree (plan `0001` moved to
+> Implemented; gaps `0001` and `0002` CLOSED). Alongside the earlier Layer 5 / Tier 5
+> work below.
 
 ## 1. Phase / Slice Status
 - **PLAN-0001 STAGE 4 COMPLETE** (`vyapaar-runtime/docs/plans/0001`, CLI half —
@@ -33,8 +35,9 @@
   seven-tab TUI workstation; feature state models; string-decimal wire contracts.
 - Verification gate:
   - `cargo clippy --workspace --all-targets --profile prod -- -D warnings` ✅
-  - `cargo test --workspace --profile prod` ✅ 59 targets, 264 passed, 0 failed
-    (`vyapaar-cli` covers the 48: 11 Stage 4 e2e + 12 strategy/run + 25 unit)
+  - `cargo test --workspace --profile prod` ✅ 59 targets, 275 passed, 0 failed
+    (`vyapaar-cli` unit tests now 33 incl. 7 new scan tests; `vyapaar-ui-core`
+    strategy primitives now 9 incl. 3 new trade-row tests)
   - `cargo fmt` ✅ on all Stage 4 touched files (pre-existing drift in
     `vyapaar-tui` / `vyapaar-ui-core` committed files predates this batch and is
     out of scope here)
@@ -42,10 +45,19 @@
 
 ## 2. Decisions & Discoveries
 - CLI `ask`/`chat`/`tui` wired to LLM backends (GGUF in-process / OpenAI
-  endpoints); `scan` remains open — see `docs/gaps/0001-cli-ask-scan-not-wired.md`.
-- `trades.json` for job runs records only `{"total_trades": N}` because
-  `vyapaar-ui-core::strategy::BacktestReport` carries aggregates only — filed as
-  `docs/gaps/0002-ui-core-backtest-no-trade-rows.md` (cited in code).
+  endpoints); **`scan` closed** — wired to canonical screener via
+  `crates/vyapaar-cli/src/scan.rs` + `runner.rs`
+  (`CommandOutcome::ScanResults`; tests in `crates/vyapaar-cli/tests/unit_tests.rs`).
+- **`trades.json` closed** — job runs now journal per-trade rows (serialized
+  `BacktestReport.trades`) instead of `{"total_trades": N}`; `BacktestReport`
+  carries `trades: Vec<TradeRow>` emitted by `simulate_strategy`
+  (tests in `crates/vyapaar-ui-core/tests/strategy_primitives_test.rs`).
+- Registry ops order per run: claim → pool dispatch → release_lease →
+  record_usage (breach/manual wins over lease) → advance cron cursor; cron
+  evaluation via the runtime `JobScheduler` (`cron` crate, Vixie dom/dow OR).
+- Determinism: all job/manifest timestamps are explicit `DateTime<Utc>` passed
+  from the caller; journal events carry only seq + type + engine output.
+- Zero `#[cfg(test)]` inside `crates/*/src/`; tests live in `<crate>/tests/`.
 - Registry ops order per run: claim → pool dispatch → release_lease →
   record_usage (breach/manual wins over lease) → advance cron cursor; cron
   evaluation via the runtime `JobScheduler` (`cron` crate, Vixie dom/dow OR).
@@ -54,12 +66,13 @@
 - Zero `#[cfg(test)]` inside `crates/*/src/`; tests live in `<crate>/tests/`.
 
 ## 3. Immediate Next Steps
-1. Wire remaining CLI `scan` to the canonical screener (close gap `0001`).
-2. Leptos view layer for `vyapaar-ui-app` (feature state models are done; no CSR
+1. Leptos view layer for `vyapaar-ui-app` (feature state models are done; no CSR
    rendering yet).
-3. Emit trade rows from `vyapaar-ui-core::strategy::simulate_strategy` (close
-   gap `0002`) so job journals become replayable tax-lot evidence.
-4. TUI `run()` event loop (crossterm `event::read` + `TuiApp::on_key`).
+2. TUI `run()` event loop (crossterm `event::read` + `TuiApp::on_key`).
+3. Optional: replace `scan` fixture universe with a live
+   `vyapaar-runtime-api-rest` `GET /screener/scan` response.
+4. Optional: replace backtest `base_ts`/`generate_market_bars` fixture with real
+   fill events for live parity.
 
 ## 4. Operating Invariants
 - Zero `#[cfg(test)]` / `#[cfg(test)] mod tests` inside `crates/*/src/`.

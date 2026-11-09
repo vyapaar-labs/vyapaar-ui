@@ -134,16 +134,24 @@ fn add_run_tick_and_journal_roundtrip() {
     assert_eq!(events[1]["worker"], "cli");
     assert!(events[2]["report"].is_object(), "engine report journaled");
 
-    // trades.json / metrics.json — engine aggregates only (see gap 0002).
+    // Gap 0002 closed: trades.json now journals per-trade rows (a JSON array of
+    // TradeRow objects) instead of only the aggregate count.
     let trades: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(journal.join("trades.json")).unwrap())
             .unwrap();
-    assert!(
-        trades
-            .get("total_trades")
-            .and_then(|v| v.as_u64())
-            .is_some()
-    );
+    assert!(trades.is_array(), "trades.json must be a row array");
+    if let Some(rows) = trades.as_array() {
+        for row in rows {
+            assert!(row.get("entry_ts").is_some(), "row missing entry_ts");
+            assert!(row.get("exit_ts").is_some(), "row missing exit_ts");
+            assert!(row.get("symbol").is_some(), "row missing symbol");
+            assert!(row.get("entry_price").is_some(), "row missing entry_price");
+            assert!(row.get("exit_price").is_some(), "row missing exit_price");
+            assert!(row.get("quantity").is_some(), "row missing quantity");
+            assert!(row.get("fees").is_some(), "row missing fees");
+            assert!(row.get("pnl").is_some(), "row missing pnl");
+        }
+    }
     let metrics: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(journal.join("metrics.json")).unwrap())
             .unwrap();

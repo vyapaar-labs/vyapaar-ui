@@ -17,6 +17,7 @@ use crate::args::{
     StrategyArgs, VerifyArgs,
 };
 use crate::jobs_runtime::{AddRequest, JobsRuntime, short_id, summarize_receipt};
+use crate::scan;
 use crate::strategy_bridge::{self, StrategyBridge, StrategyBridgeRunner};
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
@@ -546,11 +547,7 @@ fn run_chat(
 }
 
 fn run_scan(args: &ScanArgs) -> Result<CommandOutcome, CliError> {
-    let query = args.query.trim();
-    if query.is_empty() {
-        return Err(CliError::Execution("query cannot be empty".to_string()));
-    }
-    Err(CliError::NotWired("vyapaar scan".to_string()))
+    scan::run_scan_args(args)
 }
 
 fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {

@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 vyapaar-core.workspace = true
+vyapaar-ui-api-wasm.workspace = true
 vyapaar-ui-core.workspace = true
 vyapaar-tui.workspace = true
 vyapaar-highlight.workspace = true
