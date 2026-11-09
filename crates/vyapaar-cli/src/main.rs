@@ -6,11 +6,18 @@ use std::sync::Arc;
 
 use vyapaar_agent_llm::{CandleGgufConfig, CandleGgufProvider};
 use vyapaar_cli::args::parse;
-use vyapaar_cli::runner::{CliError, CommandOutcome, resolve_provider, run};
+use vyapaar_cli::jobs_runtime::boot_recover;
+use vyapaar_cli::runner::{CliError, CommandOutcome, resolve_provider, run, vyapaar_home_dir};
 use vyapaar_tui::{ActiveTab, TuiApp};
 
 fn main() -> ExitCode {
     let cli = parse();
+    // Crash recovery sweep of interrupted run journals (job & tool runs):
+    // Pending/Running snapshots are normalized to Failed before commands run.
+    let recovered = boot_recover(Some(&vyapaar_home_dir()));
+    if recovered > 0 && !cli.quiet {
+        eprintln!("vyapaar: crash recovery normalized {recovered} interrupted run journal(s)");
+    }
     match run(&cli) {
         Ok(outcome) => {
             match outcome {

@@ -29,6 +29,12 @@ vyapaar-agent-chat = { path = "../vyapaar-agent/crates/vyapaar-agent-chat" }
 vyapaar-agent-chat-tools = { path = "../vyapaar-agent/crates/vyapaar-agent-chat-tools" }
 vyapaar-agent-llm = { path = "../vyapaar-agent/crates/vyapaar-agent-llm" }
 vyapaar-agent-prompt = { path = "../vyapaar-agent/crates/vyapaar-agent-prompt" }
+# Runtime jobs/journal wiring for the CLI (`vyapaar jobs *` — PLAN-0001 Stage 4).
+# Native binaries only: these crates pull tokio/sqlx and must never leak into
+# the WASM modules (see migration-guide.md §2).
+vyapaar-runtime-jobs = { path = "../vyapaar-runtime/crates/vyapaar-runtime-jobs" }
+vyapaar-runtime-api = { path = "../vyapaar-runtime/crates/vyapaar-runtime-api" }
+vyapaar-runtime-api-rest = { path = "../vyapaar-runtime/crates/vyapaar-runtime-api-rest" }
 vyapaar-ui-core = { path = "crates/vyapaar-ui-core" }
 vyapaar-ui-assets = { path = "crates/vyapaar-ui-assets" }
 vyapaar-ui-charts = { path = "crates/vyapaar-ui-charts" }

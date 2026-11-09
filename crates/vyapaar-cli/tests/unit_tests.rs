@@ -10,7 +10,7 @@ use vyapaar_cli::args::{
     MarketplaceArgs, McpArgs, MemoryArgs, OutputFormat, PluginArgs, PurgeArgs, ScanArgs,
     SkillsArgs, VerifyArgs, resolve_log_level,
 };
-use vyapaar_cli::runner::{CliError, CommandOutcome, run, run_with_provider};
+use vyapaar_cli::runner::{CliError, CommandOutcome, run, run_jobs_with_home, run_with_provider};
 
 #[test]
 fn parse_cli_roundtrip_tui() {
@@ -296,49 +296,50 @@ fn run_purge_without_yes_refuses() {
 
 #[test]
 fn run_jobs_lifecycle() {
-    let add_cli = CliArgs {
-        command: Command::Jobs(JobsArgs::Add {
-            goal: "Scan momentum break in Nifty midcaps".into(),
-            schedule: Some("0 9 * * 1-5".into()),
-            max_turns: 20,
-            max_inr: None,
-            max_usd: None,
-            max_tokens: Some(4000),
-            max_tool_calls: Some(10),
-            max_data_calls: Some(5),
-            missed_policy: vyapaar_cli::args::MissedPolicy::Skip,
-            success: None,
-            read_only: true,
-            once: false,
-        }),
-        ..Default::default()
+    let temp = tempfile::tempdir().unwrap();
+    let add_args = JobsArgs::Add {
+        goal: "Scan momentum break in Nifty midcaps".into(),
+        schedule: Some("0 9 * * 1-5".into()),
+        max_turns: 20,
+        max_inr: None,
+        max_usd: None,
+        max_tokens: Some(4000),
+        max_tool_calls: Some(10),
+        max_data_calls: Some(5),
+        missed_policy: vyapaar_cli::args::MissedPolicy::Skip,
+        approval: vyapaar_cli::args::ApprovalPolicyArg::Auto,
+        strategy: Some(String::from("sma_crossover")),
+        symbol: Some(String::from("NSE:RELIANCE-EQ")),
+        capital: Some(rust_decimal::Decimal::new(1_000_000, 0)),
+        params: Some(String::from("{\"fast\":10}")),
+        success: None,
+        read_only: true,
+        once: false,
     };
-    let outcome = run(&add_cli).unwrap();
+    let outcome = run_jobs_with_home(&add_args, temp.path()).unwrap();
     match outcome {
         CommandOutcome::JobsSuccess(summary) => {
             assert!(summary.contains("Created job"));
             assert!(summary.contains("0 9 * * 1-5"));
+            assert!(summary.contains("sma_crossover"));
+            assert!(summary.contains("NSE:RELIANCE-EQ"));
         }
         other => panic!("expected JobsSuccess, got {other:?}"),
     }
 
-    let list_cli = CliArgs {
-        command: Command::Jobs(JobsArgs::List),
-        ..Default::default()
-    };
-    let outcome = run(&list_cli).unwrap();
+    let outcome = run_jobs_with_home(&JobsArgs::List, temp.path()).unwrap();
     match outcome {
         CommandOutcome::JobsSuccess(list) => {
             assert!(list.contains("STATUS") || list.contains("registered"));
+            assert!(
+                list.contains("Scan momentum break in Nifty midcaps"),
+                "job list must show the goal: {list}"
+            );
         }
         other => panic!("expected JobsSuccess, got {other:?}"),
     }
 
-    let install_cli = CliArgs {
-        command: Command::Jobs(JobsArgs::Install),
-        ..Default::default()
-    };
-    let outcome = run(&install_cli).unwrap();
+    let outcome = run_jobs_with_home(&JobsArgs::Install, temp.path()).unwrap();
     match outcome {
         CommandOutcome::JobsSuccess(snippet) => {
             assert!(snippet.contains("cron scheduler setup"));

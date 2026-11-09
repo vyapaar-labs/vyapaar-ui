@@ -1,16 +1,141 @@
 //! Re-export of StrategyBridge and MarketBar from vyapaar-ui-core,
 //! and bridge runner implementing StrategyRunner for agent tool calling.
+//!
+//! Every tool call is journaled under the runtime journals directory as a
+//! `kind: "tool"` run (PLAN-0001 Stage 4), best-effort: a journal failure
+//! never breaks the tool result the agent sees. Touch journals follow the
+//! same manifest conventions as job runs (`status` snapshots with wall-clock
+//! timestamps; deterministic events), so `recover_interrupted_runs` normalizes
+//! an interrupted agent turn on the next boot.
 
 use async_trait::async_trait;
 use rust_decimal::Decimal;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use vyapaar_agent_chat_tools::ports::strategy::StrategyRunner;
 pub use vyapaar_ui_core::strategy::{MarketBar, StrategyBridge, TradeSuggestion};
 
+use crate::jobs_runtime::{error_detail_value, mint_run_id};
+use vyapaar_runtime_api::{RunEvent, RunStatus};
+use vyapaar_runtime_api_rest::FileJournalWriter;
+
 /// Strategy runner bridging agent chat tools to StrategyBridge execution engine.
 #[derive(Debug, Default, Clone)]
-pub struct StrategyBridgeRunner;
+pub struct StrategyBridgeRunner {
+    /// Overrides the journals root for isolation (tests); defaults to
+    /// `~/.vyapaar/journals` (or `VYAPAAR_HOME/journals`).
+    pub journal_home: Option<PathBuf>,
+}
+
+impl StrategyBridgeRunner {
+    /// A runner journaling under the default Vyapaar home.
+    pub fn new() -> Self {
+        Self { journal_home: None }
+    }
+
+    /// A runner journaling under an explicit home (tests).
+    pub fn with_journal_home(dir: PathBuf) -> Self {
+        Self {
+            journal_home: Some(dir),
+        }
+    }
+
+    /// Where tool-run journals live.
+    fn journals_dir(&self) -> PathBuf {
+        self.journal_home
+            .clone()
+            .unwrap_or_else(crate::runner::vyapaar_home_dir)
+            .join("journals")
+    }
+
+    /// Runs one engine call and journals it as a `kind: "tool"` run.
+    fn journaled(
+        &self,
+        tool: &str,
+        input: Value,
+        engine: impl FnOnce() -> Result<Value, String>,
+    ) -> Result<Value, String> {
+        let started_at = chrono::Utc::now();
+        let outcome = engine();
+        self.journal_tool_run(tool, &input, &outcome, started_at);
+        outcome
+    }
+
+    /// Best-effort journal write for one tool call (never surfaces errors).
+    fn journal_tool_run(
+        &self,
+        tool: &str,
+        input: &Value,
+        outcome: &Result<Value, String>,
+        started_at: chrono::DateTime<chrono::Utc>,
+    ) {
+        let Ok(run_id) = mint_run_id() else {
+            return;
+        };
+        let running = match RunStatus::Pending.next(RunEvent::Start) {
+            Ok(status) => status,
+            Err(_) => return,
+        };
+        let running_manifest = serde_json::json!({
+            "manifest_version": 1,
+            "kind": "tool",
+            "run_id": run_id.as_str(),
+            "tool": tool,
+            "input": input,
+            "status": running,
+            "created_at": started_at.to_rfc3339(),
+            "started_at": started_at.to_rfc3339(),
+        });
+        let Ok(mut writer) =
+            FileJournalWriter::create_from_value(&self.journals_dir(), &run_id, &running_manifest)
+        else {
+            return;
+        };
+        let _ = writer.append_event(&serde_json::json!({
+            "seq": 1,
+            "type": "tool.started",
+            "tool": tool,
+            "input": input,
+        }));
+
+        let (status, result_value, error) = match outcome {
+            Ok(value) => match running.next(RunEvent::Complete) {
+                Ok(status) => (status, Some(value.clone()), None),
+                Err(_) => return,
+            },
+            Err(err) => match running.next(RunEvent::Fail) {
+                Ok(status) => (status, None, Some(error_detail_value(err))),
+                Err(_) => return,
+            },
+        };
+
+        let result_event = match outcome {
+            Ok(_) => serde_json::json!({
+                "seq": 2,
+                "type": "tool.result",
+                "tool": tool,
+            }),
+            Err(_) => serde_json::json!({
+                "seq": 2,
+                "type": "tool.failed",
+                "tool": tool,
+            }),
+        };
+        let _ = writer.append_event(&result_event);
+
+        let mut final_manifest = running_manifest.clone();
+        final_manifest["status"] = serde_json::json!(status);
+        final_manifest["finished_at"] = serde_json::json!(chrono::Utc::now().to_rfc3339());
+        if let Some(err) = error {
+            final_manifest["error"] = err;
+        }
+        // Tool runs carry no tax-lot data: `trades.json` stays an empty object
+        // and the engine result lands in `metrics.json`.
+        let metrics = result_value.unwrap_or_else(|| serde_json::json!({}));
+        let _ = writer.finalize_value(&final_manifest, &serde_json::json!({}), &metrics);
+    }
+}
 
 #[async_trait]
 impl StrategyRunner for StrategyBridgeRunner {
@@ -21,8 +146,20 @@ impl StrategyRunner for StrategyBridgeRunner {
         capital: Decimal,
         params: Option<BTreeMap<String, Decimal>>,
     ) -> Result<Value, String> {
-        let report = StrategyBridge::run_backtest(strategy, symbol, params.as_ref(), capital)?;
-        serde_json::to_value(&report).map_err(|e| e.to_string())
+        self.journaled(
+            "run_backtest",
+            serde_json::json!({
+                "strategy": strategy,
+                "symbol": symbol,
+                "capital": capital.to_string(),
+                "params": params,
+            }),
+            || {
+                let report =
+                    StrategyBridge::run_backtest(strategy, symbol, params.as_ref(), capital)?;
+                serde_json::to_value(&report).map_err(|e| e.to_string())
+            },
+        )
     }
 
     async fn tune_strategy(
@@ -32,8 +169,19 @@ impl StrategyRunner for StrategyBridgeRunner {
         capital: Decimal,
         metric: &str,
     ) -> Result<Value, String> {
-        let opt = StrategyBridge::tune_strategy(strategy, symbol, capital, metric)?;
-        serde_json::to_value(&opt).map_err(|e| e.to_string())
+        self.journaled(
+            "tune_strategy",
+            serde_json::json!({
+                "strategy": strategy,
+                "symbol": symbol,
+                "capital": capital.to_string(),
+                "metric": metric,
+            }),
+            || {
+                let opt = StrategyBridge::tune_strategy(strategy, symbol, capital, metric)?;
+                serde_json::to_value(&opt).map_err(|e| e.to_string())
+            },
+        )
     }
 
     async fn generate_trade_suggestion(
@@ -43,8 +191,20 @@ impl StrategyRunner for StrategyBridgeRunner {
         capital: Decimal,
         risk_pct: Decimal,
     ) -> Result<Value, String> {
-        let sugg = StrategyBridge::generate_trade_suggestion(strategy, symbol, capital, risk_pct)?;
-        serde_json::to_value(&sugg).map_err(|e| e.to_string())
+        self.journaled(
+            "generate_trade_suggestion",
+            serde_json::json!({
+                "strategy": strategy,
+                "symbol": symbol,
+                "capital": capital.to_string(),
+                "risk_pct": risk_pct.to_string(),
+            }),
+            || {
+                let sugg =
+                    StrategyBridge::generate_trade_suggestion(strategy, symbol, capital, risk_pct)?;
+                serde_json::to_value(&sugg).map_err(|e| e.to_string())
+            },
+        )
     }
 }
 

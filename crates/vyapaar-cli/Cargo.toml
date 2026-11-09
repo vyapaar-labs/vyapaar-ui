@@ -23,12 +23,20 @@ vyapaar-agent-core.workspace = true
 vyapaar-agent-chat.workspace = true
 vyapaar-agent-llm.workspace = true
 vyapaar-agent-chat-tools.workspace = true
+vyapaar-runtime-jobs.workspace = true
+vyapaar-runtime-api.workspace = true
+vyapaar-runtime-api-rest.workspace = true
 tokio = { workspace = true, features = ["full"] }
 futures.workspace = true
 rust_decimal.workspace = true
+chrono.workspace = true
+uuid.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 async-trait = "0.1"
+
+[dev-dependencies]
+tempfile = "3"

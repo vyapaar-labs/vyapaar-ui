@@ -12,13 +12,14 @@ use vyapaar_agent_llm::{
 };
 
 use crate::args::{
-    AskArgs, ChatArgs, CliArgs, Command, DoctorArgs, JobsArgs, MarketplaceArgs, McpArgs,
-    MemoryArgs, OutputFormat, PluginArgs, PurgeArgs, ScanArgs, SkillsArgs, StrategyArgs,
-    VerifyArgs,
+    ApprovalPolicyArg, AskArgs, ChatArgs, CliArgs, Command, DoctorArgs, JobsArgs, MarketplaceArgs,
+    McpArgs, MemoryArgs, MissedPolicy, OutputFormat, PluginArgs, PurgeArgs, ScanArgs, SkillsArgs,
+    StrategyArgs, VerifyArgs,
 };
+use crate::jobs_runtime::{AddRequest, JobsRuntime, short_id, summarize_receipt};
 use crate::strategy_bridge::{self, StrategyBridge, StrategyBridgeRunner};
-use std::collections::BTreeMap;
 use rust_decimal::Decimal;
+use std::collections::BTreeMap;
 
 /// Errors surfaced by the CLI runner.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,7 +88,8 @@ pub enum CommandOutcome {
     StrategySuccess(String),
 }
 
-fn vyapaar_home_dir() -> PathBuf {
+/// The CLI home directory (`~/.vyapaar`, override with `VYAPAAR_HOME`).
+pub fn vyapaar_home_dir() -> PathBuf {
     if let Ok(home) = std::env::var("VYAPAAR_HOME") {
         if !home.trim().is_empty() {
             return PathBuf::from(home);
@@ -216,7 +218,9 @@ fn run_ask(
 
     // Direct backtest simulation query handler (vyapaar-sim tool integration for portfolio rebalancing)
     if !is_strategy_workflow {
-        if let Some(res) = crate::backtest_gen::handle_backtest_query(prompt, args.format, cli.quiet) {
+        if let Some(res) =
+            crate::backtest_gen::handle_backtest_query(prompt, args.format, cli.quiet)
+        {
             return res;
         }
     }
@@ -246,7 +250,7 @@ fn run_ask(
             .and_then(|t| rust_decimal::Decimal::try_from(t).ok());
 
         let strategy_tools = vyapaar_agent_chat_tools::catalog::create_strategy_tools(Some(
-            Arc::new(StrategyBridgeRunner),
+            Arc::new(StrategyBridgeRunner::default()),
         ))
         .into_iter()
         .map(|t| t.spec().clone())
@@ -549,18 +553,14 @@ fn run_scan(args: &ScanArgs) -> Result<CommandOutcome, CliError> {
     Err(CliError::NotWired("vyapaar scan".to_string()))
 }
 
-fn rand_u32() -> u32 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    nanos ^ 0x5a5a5a5a
+fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {
+    run_jobs_with_home(args, &vyapaar_home_dir())
 }
 
-fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {
-    let home = vyapaar_home_dir();
-    let jobs_file = home.join("jobs.json");
+/// Runs a `vyapaar jobs` command against an explicit home directory
+/// (`VYAPAAR_HOME` isolation for tests/operators).
+pub fn run_jobs_with_home(args: &JobsArgs, home: &Path) -> Result<CommandOutcome, CliError> {
+    let runtime = JobsRuntime::open(home)?;
 
     match args {
         JobsArgs::Add {
@@ -570,20 +570,44 @@ fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {
             max_inr,
             max_usd,
             max_tokens,
-            max_tool_calls: _,
-            max_data_calls: _,
+            max_tool_calls,
+            max_data_calls,
             missed_policy,
-            success: _,
+            approval,
+            strategy,
+            symbol,
+            capital,
+            params,
+            success,
             read_only,
             once,
         } => {
-            if goal.trim().is_empty() {
-                return Err(CliError::Execution("job goal cannot be empty".to_string()));
-            }
-            let _ = fs::create_dir_all(&home);
-            // Quantcept convention: add prints an 8-character ID
-            let id = format!("{:08x}", rand_u32());
+            // Quantcept convention: add prints the 8-character ID.
+            let req = AddRequest {
+                goal: goal.clone(),
+                schedule: schedule.clone(),
+                max_turns: *max_turns,
+                max_inr: *max_inr,
+                max_usd: *max_usd,
+                max_tokens: *max_tokens,
+                max_tool_calls: *max_tool_calls,
+                max_data_calls: *max_data_calls,
+                missed_policy: match missed_policy {
+                    MissedPolicy::Skip => vyapaar_runtime_jobs::MissedPolicy::Skip,
+                    MissedPolicy::CatchUp => vyapaar_runtime_jobs::MissedPolicy::CatchUp,
+                },
+                approval_manual: *approval == ApprovalPolicyArg::Manual,
+                strategy: strategy.clone(),
+                symbol: symbol.clone(),
+                capital: *capital,
+                params: params.clone(),
+                success: success.clone(),
+                read_only: *read_only,
+                once: *once,
+            };
+            let spec = runtime.add(&req)?;
             let sched_desc = schedule.as_deref().unwrap_or("none (manual trigger)");
+            let trigger_desc = if schedule.is_some() { "cron" } else { "manual" };
             let cost_desc = if let Some(inr) = max_inr {
                 format!("₹{inr}")
             } else if let Some(usd) = max_usd {
@@ -591,92 +615,112 @@ fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {
             } else {
                 "unlimited".to_string()
             };
-
-            let summary = format!(
-                "Created job {id}\n\
+            let append_budget = |s: &mut String, opt: &Option<usize>, unit: &str| {
+                if let Some(limit) = opt {
+                    s.push_str(&format!(", max {limit} {unit}"));
+                }
+            };
+            let mut summary = format!(
+                "Created job {short}\n\
                  Goal:           {goal}\n\
                  Schedule:       {sched_desc}\n\
+                 Trigger:        {trigger_desc}\n\
+                 Approval:       {approval}\n\
+                 Strategy:       {strategy_label}\n\
                  Budget:         max {max_turns} turns, {cost_desc}, max {} tokens\n\
-                 Missed Policy:  {missed_policy:?}\n\
                  Read-Only:      {read_only}\n\
                  Run Once:       {once}",
                 max_tokens
                     .map(|t| t.to_string())
-                    .unwrap_or_else(|| "unlimited".to_string())
+                    .unwrap_or_else(|| "unlimited".to_string()),
+                short = short_id(&spec),
+                approval = match approval {
+                    ApprovalPolicyArg::Auto => "auto (budget breaches need approval)",
+                    ApprovalPolicyArg::Manual => "manual (every run needs approval)",
+                },
+                strategy_label = match (strategy, symbol, capital) {
+                    (Some(strategy), Some(symbol), Some(capital)) => {
+                        format!("{strategy} on {symbol} @ ₹{capital}")
+                    }
+                    (Some(strategy), Some(symbol), None) => format!("{strategy} on {symbol}"),
+                    (Some(strategy), None, _) => format!("{strategy}"),
+                    _ => "none (goal-only; `jobs run` requires a strategy)".to_string(),
+                }
             );
-
-            let mut entries: Vec<serde_json::Value> = if jobs_file.exists() {
-                fs::read_to_string(&jobs_file)
-                    .ok()
-                    .and_then(|c| serde_json::from_str(&c).ok())
-                    .unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-
-            entries.push(serde_json::json!({
-                "id": id,
-                "goal": goal,
-                "schedule": schedule,
-                "max_turns": max_turns,
-                "max_inr": max_inr.map(|i| i.to_string()),
-                "max_usd": max_usd.map(|u| u.to_string()),
-                "status": "Active",
-                "read_only": read_only
-            }));
-
-            let _ = fs::write(
-                &jobs_file,
-                serde_json::to_string_pretty(&entries).unwrap_or_default(),
-            );
+            append_budget(&mut summary, max_tool_calls, "tool calls");
+            append_budget(&mut summary, max_data_calls, "data calls");
             Ok(CommandOutcome::JobsSuccess(summary))
         }
         JobsArgs::List => {
-            if !jobs_file.exists() {
+            let mut specs = runtime.registry()?.list_jobs();
+            if specs.is_empty() {
                 return Ok(CommandOutcome::JobsSuccess(
-                    "No autonomous jobs registered. Create one with `vyapaar jobs add <goal> --schedule <cron>`.".to_string(),
+                    "No autonomous jobs registered. Create one with `vyapaar jobs add <goal> --schedule <cron> --strategy <name>`.".to_string(),
                 ));
             }
-            let content = fs::read_to_string(&jobs_file).unwrap_or_else(|_| "[]".to_string());
-            let entries: Vec<serde_json::Value> =
-                serde_json::from_str(&content).unwrap_or_default();
-            if entries.is_empty() {
-                return Ok(CommandOutcome::JobsSuccess(
-                    "No active jobs registered.".to_string(),
-                ));
-            }
-
-            let mut out = String::from("ID        STATUS   SCHEDULE        GOAL\n");
-            out.push_str(
-                "────────  ───────  ──────────────  ────────────────────────────────────────\n",
+            specs.sort_by_key(|spec| spec.created_at);
+            let mut out = String::from(
+                "ID         STATUS             SCHEDULE        NEXT RUN                   GOAL\n",
             );
-            for j in entries {
-                let id = j.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
-                let status = j.get("status").and_then(|v| v.as_str()).unwrap_or("Active");
-                let sched = j
-                    .get("schedule")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("manual");
-                let goal = j.get("goal").and_then(|v| v.as_str()).unwrap_or("");
+            out.push_str(
+                "─────────  ─────────────────  ──────────────  ─────────────────────────  ────────────────────────────────────────\n",
+            );
+            for spec in &specs {
+                let manual = spec.metadata.get("trigger").map(String::as_str) == Some("manual");
+                let sched = if manual {
+                    "manual".to_string()
+                } else {
+                    spec.schedule.expression().to_string()
+                };
+                let next = spec
+                    .next_run_at
+                    .map(|at| at.to_rfc3339())
+                    .unwrap_or_else(|| "-".to_string());
                 out.push_str(&format!(
-                    "{:<8}  {:<7}  {:<14}  {:<40}\n",
-                    id, status, sched, goal
+                    "{:<9}  {:<17}  {:<14}  {:<25}  {:<40}\n",
+                    short_id(spec),
+                    format!("{:?}", spec.status),
+                    sched,
+                    next,
+                    spec.goal
                 ));
             }
             Ok(CommandOutcome::JobsSuccess(out))
         }
-        JobsArgs::Run { id } => Ok(CommandOutcome::JobsSuccess(format!(
-            "Triggered manual execution of job {id}. Running research turns in background..."
-        ))),
+        JobsArgs::Run { id } => {
+            let spec = runtime.resolve_job(id)?;
+            let receipt = runtime.run(&spec, "manual")?;
+            Ok(CommandOutcome::JobsSuccess(summarize_receipt(&receipt)))
+        }
         JobsArgs::Tick { all } => {
             let scope = if *all {
                 "all workspaces"
             } else {
                 "current workspace"
             };
-            Ok(CommandOutcome::JobsSuccess(format!(
-                "Ticked cron scheduler across {scope}: evaluated 0 due jobs against IST clock."
-            )))
+            let report = runtime.tick()?;
+            let mut out = format!(
+                "Ticked cron scheduler across {scope}: recovered {} interrupted journal(s), swept {} expired lease(s).",
+                report.recovered_runs, report.swept_leases
+            );
+            if !report.executed.is_empty() {
+                out.push_str(&format!("\nExecuted {} job run(s):", report.executed.len()));
+                for (id, receipt) in &report.executed {
+                    out.push_str(&format!("\n• {id}: {}", summarize_receipt(receipt)));
+                    if receipt.job_status != vyapaar_runtime_jobs::JobStatus::Active {
+                        out.push_str(&format!(" [job now: {:?}]", receipt.job_status));
+                    }
+                }
+            } else {
+                out.push_str("\nNo jobs fired on this tick.");
+            }
+            for (id, fire) in &report.pending_until {
+                out.push_str(&format!("\nWaiting {id}: fires {fire}"));
+            }
+            for (id, reason) in &report.held {
+                out.push_str(&format!("\nHeld {id}: {reason}"));
+            }
+            Ok(CommandOutcome::JobsSuccess(out))
         }
         JobsArgs::Install => {
             // Quantcept convention: prints snippet and does not install
@@ -689,58 +733,110 @@ fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {
                            # Persistent=true";
             Ok(CommandOutcome::JobsSuccess(snippet.to_string()))
         }
-        JobsArgs::Logs { id } => Ok(CommandOutcome::JobsSuccess(format!(
-            "Execution logs for job {id}:\n[INFO] Job initialized. No recent errors."
-        ))),
-        JobsArgs::Pause { id } => {
-            if jobs_file.exists() {
-                if let Ok(content) = fs::read_to_string(&jobs_file) {
-                    if let Ok(mut entries) =
-                        serde_json::from_str::<Vec<serde_json::Value>>(&content)
-                    {
-                        for j in &mut entries {
-                            if j.get("id").and_then(|v| v.as_str()) == Some(id) {
-                                j["status"] = serde_json::json!("Paused");
-                            }
-                        }
-                        let _ = fs::write(
-                            &jobs_file,
-                            serde_json::to_string_pretty(&entries).unwrap_or_default(),
-                        );
-                    }
-                }
+        JobsArgs::Logs { id } => {
+            let spec = runtime.resolve_job(id)?;
+            let runs = runtime.journal_runs(&spec)?;
+            if runs.is_empty() {
+                return Ok(CommandOutcome::JobsSuccess(format!(
+                    "No journaled runs for job {} yet. Run `vyapaar jobs run` or wait for `vyapaar jobs tick`.",
+                    short_id(&spec)
+                )));
             }
-            Ok(CommandOutcome::JobsSuccess(format!("Job {id} paused.")))
+            let mut out = format!("Runs of job {} (newest first):", short_id(&spec));
+            for run in &runs {
+                let run_id = run
+                    .manifest
+                    .get("run_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
+                let status = run
+                    .manifest
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
+                let trigger = run
+                    .manifest
+                    .get("trigger")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("manual");
+                out.push_str(&format!(
+                    "\n• run_id={run_id} status={status} trigger={trigger} events={} dir={}",
+                    run.events.len(),
+                    run.dir.display()
+                ));
+            }
+            out.push_str("\nNewest run events:");
+            for event in &runs[0].events {
+                out.push_str(&format!(
+                    "\n  seq={} type={}",
+                    event
+                        .get("seq")
+                        .map(|v| v.to_string())
+                        .unwrap_or("0".into()),
+                    event
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                ));
+            }
+            Ok(CommandOutcome::JobsSuccess(out))
+        }
+        JobsArgs::Pause { id } => {
+            let spec = runtime.pause(id)?;
+            Ok(CommandOutcome::JobsSuccess(format!(
+                "Job {} paused.",
+                short_id(&spec)
+            )))
         }
         JobsArgs::Resume { id } => {
-            if jobs_file.exists() {
-                if let Ok(content) = fs::read_to_string(&jobs_file) {
-                    if let Ok(mut entries) =
-                        serde_json::from_str::<Vec<serde_json::Value>>(&content)
-                    {
-                        for j in &mut entries {
-                            if j.get("id").and_then(|v| v.as_str()) == Some(id) {
-                                j["status"] = serde_json::json!("Active");
-                            }
-                        }
-                        let _ = fs::write(
-                            &jobs_file,
-                            serde_json::to_string_pretty(&entries).unwrap_or_default(),
-                        );
-                    }
+            let spec = runtime.resume(id)?;
+            Ok(CommandOutcome::JobsSuccess(format!(
+                "Job {} resumed.",
+                short_id(&spec)
+            )))
+        }
+        JobsArgs::Approvals => {
+            let queue = runtime.approvals()?;
+            if queue.is_empty() {
+                return Ok(CommandOutcome::JobsSuccess(
+                    "No pending actions requiring human confirmation (0 approvals in queue)."
+                        .to_string(),
+                ));
+            }
+            let mut out = format!(
+                "{} pending approval(s) (budget breaches / manual gates):",
+                queue.len()
+            );
+            for spec in &queue {
+                let reason = spec.budgets.validate(&spec.usage).err();
+                out.push_str(&format!(
+                    "\n• {} '{}' — approve: `vyapaar jobs approve {}`, deny: `vyapaar jobs deny {}`",
+                    short_id(spec),
+                    spec.name,
+                    short_id(spec),
+                    short_id(spec)
+                ));
+                if let Some(breach) = reason {
+                    out.push_str(&format!(" (breach: {breach})"));
                 }
             }
-            Ok(CommandOutcome::JobsSuccess(format!("Job {id} resumed.")))
+            Ok(CommandOutcome::JobsSuccess(out))
         }
-        JobsArgs::Approvals => Ok(CommandOutcome::JobsSuccess(
-            "No pending actions requiring human confirmation (0 approvals in queue).".to_string(),
-        )),
-        JobsArgs::Approve { id } => Ok(CommandOutcome::JobsSuccess(format!(
-            "Action {id} approved. Proceeding with execution."
-        ))),
-        JobsArgs::Deny { id } => Ok(CommandOutcome::JobsSuccess(format!(
-            "Action {id} rejected."
-        ))),
+        JobsArgs::Approve { id } => {
+            let spec = runtime.approve(id)?;
+            Ok(CommandOutcome::JobsSuccess(format!(
+                "Job {} approved; it may run again (`vyapaar jobs run {}`).",
+                short_id(&spec),
+                short_id(&spec)
+            )))
+        }
+        JobsArgs::Deny { id } => {
+            let spec = runtime.deny(id)?;
+            Ok(CommandOutcome::JobsSuccess(format!(
+                "Job {} denied and paused.",
+                short_id(&spec)
+            )))
+        }
     }
 }
 
@@ -1073,13 +1169,12 @@ fn run_health() -> Result<CommandOutcome, CliError> {
     ))
 }
 
-
 fn run_strategy(args: &StrategyArgs) -> Result<CommandOutcome, CliError> {
     match args {
         StrategyArgs::List => {
             let strategies = StrategyBridge::discover_strategies();
             let mut out = String::from(
-                "ID                NAME                             VERSION  SOURCE    TARGETS             PARAMETERS\n"
+                "ID                NAME                             VERSION  SOURCE    TARGETS             PARAMETERS\n",
             );
             out.push_str(
                 "────────────────  ───────────────────────────────  ───────  ────────  ──────────────────  ──────────────────────────────────\n"
@@ -1104,7 +1199,12 @@ fn run_strategy(args: &StrategyArgs) -> Result<CommandOutcome, CliError> {
                     .join(", ");
                 out.push_str(&format!(
                     "{:<16}  {:<31}  {:<7}  {:<8}  {:<18}  {}\n",
-                    s.id, s.name, s.version, s.source.as_str(), targets, params
+                    s.id,
+                    s.name,
+                    s.version,
+                    s.source.as_str(),
+                    targets,
+                    params
                 ));
             }
             Ok(CommandOutcome::StrategySuccess(out))
@@ -1138,8 +1238,16 @@ fn run_strategy(args: &StrategyArgs) -> Result<CommandOutcome, CliError> {
                 ));
             }
 
-            let pnl_sign = if report.net_pnl >= Decimal::ZERO { "+" } else { "" };
-            let ret_sign = if report.total_return_pct >= Decimal::ZERO { "+" } else { "" };
+            let pnl_sign = if report.net_pnl >= Decimal::ZERO {
+                "+"
+            } else {
+                ""
+            };
+            let ret_sign = if report.total_return_pct >= Decimal::ZERO {
+                "+"
+            } else {
+                ""
+            };
 
             let pnl_str = format!("{}{:.2}", pnl_sign, report.net_pnl);
             let ret_str = format!("{}{:.2}%", ret_sign, report.total_return_pct);
@@ -1147,7 +1255,7 @@ fn run_strategy(args: &StrategyArgs) -> Result<CommandOutcome, CliError> {
             let win_str = format!("{:.2}%", report.win_rate_pct);
 
             let out = format!(
-"┌────────────────────────────────────────────────────────────────────────┐
+                "┌────────────────────────────────────────────────────────────────────────┐
 │ Strategy Backtest Execution Report: {:<35}│
 │ Target: {:<20} | Capital: ₹{:<30}│
 ├────────────────────────────────────────────────────────────────────────┤
@@ -1208,7 +1316,7 @@ fn run_strategy(args: &StrategyArgs) -> Result<CommandOutcome, CliError> {
             let dsr_line = format!("{}% confidence (DSR >= 90% target)", dsr_pct);
 
             let out = format!(
-"┌────────────────────────────────────────────────────────────────────────┐
+                "┌────────────────────────────────────────────────────────────────────────┐
 │ Strategy Parameter Tuning & Overfitting Audit: {:<24}│
 │ Target: {:<20} | Evaluated Trials: {:<22}│
 ├────────────────────────────────────────────────────────────────────────┤

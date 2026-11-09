@@ -18,15 +18,22 @@
 
 pub mod args;
 pub mod backtest_gen;
+pub mod jobs_runtime;
 pub mod runner;
 pub mod strategy_bridge;
 
 pub use args::{
-    AskArgs, ChatArgs, CliArgs, Command, DoctorArgs, JobsArgs, LogLevel, MarketplaceArgs, McpArgs,
-    MemoryArgs, MissedPolicy, OutputFormat, PluginArgs, PurgeArgs, ScanArgs, SkillsArgs,
-    StrategyArgs, StrategyRunArgs, StrategySubcommand, StrategySuggestArgs, StrategyTuneArgs,
-    VerifyArgs, resolve_log_level,
+    ApprovalPolicyArg, AskArgs, ChatArgs, CliArgs, Command, DoctorArgs, JobsArgs, LogLevel,
+    MarketplaceArgs, McpArgs, MemoryArgs, MissedPolicy, OutputFormat, PluginArgs, PurgeArgs,
+    ScanArgs, SkillsArgs, StrategyArgs, StrategyRunArgs, StrategySubcommand, StrategySuggestArgs,
+    StrategyTuneArgs, VerifyArgs, resolve_log_level,
 };
 pub use backtest_gen::{BacktestQuerySpec, handle_backtest_query, parse_backtest_query};
-pub use runner::{CliError, CommandOutcome, resolve_provider, run, run_with_provider};
+pub use jobs_runtime::{
+    AddRequest, JobRunRecord, JobsRuntime, RunDisposition, RunReceipt, TickReport, boot_recover,
+    mint_run_id, short_id,
+};
+pub use runner::{
+    CliError, CommandOutcome, resolve_provider, run, run_jobs_with_home, run_with_provider,
+};
 pub use strategy_bridge::StrategyBridge;

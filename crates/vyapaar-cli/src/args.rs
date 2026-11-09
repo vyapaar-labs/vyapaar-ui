@@ -41,6 +41,16 @@ pub enum MissedPolicy {
     CatchUp,
 }
 
+/// Approval gating for job runs (`jobs add --approval auto|manual`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
+pub enum ApprovalPolicyArg {
+    /// Runs within budget automatically; only budget breaches need approval.
+    #[default]
+    Auto,
+    /// Hold every run behind a human approval gate.
+    Manual,
+}
+
 /// Arguments for `vyapaar ask`.
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
 pub struct AskArgs {
@@ -105,6 +115,11 @@ pub enum JobsArgs {
         max_tool_calls: Option<usize>,
         max_data_calls: Option<usize>,
         missed_policy: MissedPolicy,
+        approval: ApprovalPolicyArg,
+        strategy: Option<String>,
+        symbol: Option<String>,
+        capital: Option<rust_decimal::Decimal>,
+        params: Option<String>,
         success: Option<String>,
         read_only: bool,
         once: bool,
@@ -591,6 +606,22 @@ pub enum JobsSubcommand {
         /// Policy when a scheduled run is missed.
         #[arg(long, value_enum, default_value = "skip")]
         missed_policy: MissedPolicy,
+        /// Approval gating before a run may execute.
+        #[arg(long, value_enum, default_value = "auto")]
+        approval: ApprovalPolicyArg,
+        /// Strategy id the job executes (e.g. "sma_crossover"); jobs without a
+        /// strategy are refused by `jobs run` because they have no payload.
+        #[arg(long)]
+        strategy: Option<String>,
+        /// Canonical instrument the strategy targets (e.g. "NSE:RELIANCE-EQ").
+        #[arg(long)]
+        symbol: Option<String>,
+        /// Backtest capital in INR (default 1_000_000).
+        #[arg(long)]
+        capital: Option<rust_decimal::Decimal>,
+        /// Strategy parameter overrides as a JSON object (e.g. '{"fast":10}').
+        #[arg(long)]
+        params: Option<String>,
         /// Optional success criteria JSON.
         #[arg(long)]
         success: Option<String>,
@@ -847,6 +878,11 @@ impl From<Cli> for CliArgs {
                     max_tool_calls,
                     max_data_calls,
                     missed_policy,
+                    approval,
+                    strategy,
+                    symbol,
+                    capital,
+                    params,
                     success,
                     read_only,
                     once,
@@ -860,6 +896,11 @@ impl From<Cli> for CliArgs {
                     max_tool_calls,
                     max_data_calls,
                     missed_policy,
+                    approval,
+                    strategy,
+                    symbol,
+                    capital,
+                    params,
                     success,
                     read_only,
                     once,
