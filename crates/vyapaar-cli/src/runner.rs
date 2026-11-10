@@ -13,8 +13,8 @@ use vyapaar_agent_llm::{
 
 use crate::args::{
     ApprovalPolicyArg, AskArgs, ChatArgs, CliArgs, Command, DoctorArgs, JobsArgs, MarketplaceArgs,
-    McpArgs, MemoryArgs, MissedPolicy, OutputFormat, PluginArgs, PurgeArgs, ScanArgs, SkillsArgs,
-    StrategyArgs, VerifyArgs,
+    McpArgs, MemoryArgs, MissedPolicy, OutputFormat, PluginArgs, PurgeArgs, ScanArgs, ServeArgs,
+    SkillsArgs, StrategyArgs, VerifyArgs,
 };
 use crate::jobs_runtime::{AddRequest, JobsRuntime, short_id, summarize_receipt};
 use crate::scan;
@@ -87,6 +87,8 @@ pub enum CommandOutcome {
     HealthReport(String),
     /// A `strategy` command produced an outcome message.
     StrategySuccess(String),
+    /// A `serve` run exited cleanly after graceful shutdown.
+    ServeSuccess(String),
 }
 
 /// The CLI home directory (`~/.vyapaar`, override with `VYAPAAR_HOME`).
@@ -185,6 +187,7 @@ pub fn run_with_provider(
         Command::Ask(args) => run_ask(args, cli, provider),
         Command::Chat(args) => run_chat(args, cli, provider),
         Command::Scan(args) => run_scan(args),
+        Command::Serve(args) => run_serve(args),
         Command::Jobs(args) => run_jobs(args),
         Command::Verify(args) => run_verify(args),
         Command::Memory(args) => run_memory(args),
@@ -548,6 +551,32 @@ fn run_chat(
 
 fn run_scan(args: &ScanArgs) -> Result<CommandOutcome, CliError> {
     scan::run_scan_args(args)
+}
+
+/// Boots `vyapaar-runtime-api-rest` and blocks until `Ctrl-C`/`SIGTERM`.
+///
+/// `run_server_blocking` prints `listening on http://<addr>` itself once bound and performs its
+/// own graceful shutdown; this just builds the `ServeConfig` from CLI args and maps the result.
+fn run_serve(args: &ServeArgs) -> Result<CommandOutcome, CliError> {
+    let mut config = vyapaar_runtime_api_rest::ServeConfig::new(args.data_dir.clone());
+    config.addr = args.addr;
+    config.cors_origins = args.cors_origin.clone();
+    if let Some(dir) = &args.profiles_dir {
+        config.runs.profiles_dir = dir.clone();
+    }
+    if let Some(dir) = &args.portfolios_dir {
+        config.runs.portfolios_dir = dir.clone();
+    }
+    if let Some(dir) = &args.journals_dir {
+        config.runs.journals_dir = dir.clone();
+    }
+    config.auth.tokens_file = args.tokens_file.clone();
+
+    vyapaar_runtime_api_rest::bootstrap::run_server_blocking(&config)
+        .map_err(|e| CliError::Execution(e.to_string()))?;
+    Ok(CommandOutcome::ServeSuccess(
+        "vyapaar: server shut down cleanly".to_string(),
+    ))
 }
 
 fn run_jobs(args: &JobsArgs) -> Result<CommandOutcome, CliError> {

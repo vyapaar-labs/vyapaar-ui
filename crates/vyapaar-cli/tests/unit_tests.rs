@@ -9,7 +9,7 @@ use vyapaar_agent_llm::ScriptedFakeLlm;
 use vyapaar_cli::args::{
     AskArgs, ChatArgs, Cli, CliArgs, CliCommand, Command, DoctorArgs, JobsArgs, LogLevel,
     MarketplaceArgs, McpArgs, MemoryArgs, OutputFormat, PluginArgs, PurgeArgs, ScanArgs,
-    SkillsArgs, VerifyArgs, resolve_log_level,
+    ServeArgs, SkillsArgs, VerifyArgs, resolve_log_level,
 };
 use vyapaar_cli::runner::{CliError, CommandOutcome, run, run_jobs_with_home, run_with_provider};
 use vyapaar_cli::scan::{parse_query, scan_universe};
@@ -119,6 +119,35 @@ fn parse_cli_roundtrip_scan() {
         args.command,
         Command::Scan(ScanArgs {
             query: "roe>15".into()
+        })
+    );
+}
+
+#[test]
+fn parse_cli_roundtrip_serve() {
+    let cli = Cli {
+        command: Some(CliCommand::Serve {
+            data_dir: PathBuf::from("data/catalog"),
+            addr: "127.0.0.1:9000".parse().unwrap(),
+            cors_origin: vec!["http://localhost:3000".to_string()],
+            profiles_dir: Some(PathBuf::from("data/profiles")),
+            portfolios_dir: None,
+            journals_dir: None,
+            tokens_file: None,
+        }),
+        ..Default::default()
+    };
+    let args: CliArgs = cli.into();
+    assert_eq!(
+        args.command,
+        Command::Serve(ServeArgs {
+            data_dir: PathBuf::from("data/catalog"),
+            addr: "127.0.0.1:9000".parse().unwrap(),
+            cors_origin: vec!["http://localhost:3000".to_string()],
+            profiles_dir: Some(PathBuf::from("data/profiles")),
+            portfolios_dir: None,
+            journals_dir: None,
+            tokens_file: None,
         })
     );
 }

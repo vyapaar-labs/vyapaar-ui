@@ -1,6 +1,7 @@
 # `vyapaar-ui` — Inter-Agent Handoff (Layer 5)
 
-> Updated: 2026-11-09 — PLAN-0001 Stage 4 (CLI & agent jobs unification) complete;
+> Updated: 2026-11-10 — added `vyapaar serve` (no server binary existed anywhere in the
+> workspace before this). PLAN-0001 Stage 4 (CLI & agent jobs unification) complete;
 > `docs/plans` and `docs/gaps` reconciled against the green tree (plan `0001` moved to
 > Implemented; gaps `0001` and `0002` CLOSED). Alongside the earlier Layer 5 / Tier 5
 > work below.
@@ -35,9 +36,10 @@
   seven-tab TUI workstation; feature state models; string-decimal wire contracts.
 - Verification gate:
   - `cargo clippy --workspace --all-targets --profile prod -- -D warnings` ✅
-  - `cargo test --workspace --profile prod` ✅ 59 targets, 275 passed, 0 failed
-    (`vyapaar-cli` unit tests now 33 incl. 7 new scan tests; `vyapaar-ui-core`
-    strategy primitives now 9 incl. 3 new trade-row tests)
+  - `cargo test --workspace --profile prod` ✅ as of Stage 4: 59 targets, 275 passed
+    (`vyapaar-cli` unit tests 33 incl. 7 scan tests; `vyapaar-ui-core` strategy
+    primitives 9 incl. 3 trade-row tests); `cargo test -p vyapaar-cli --profile prod` ✅
+    34 passed after the `vyapaar serve` batch (added `parse_cli_roundtrip_serve`)
   - `cargo fmt` ✅ on all Stage 4 touched files (pre-existing drift in
     `vyapaar-tui` / `vyapaar-ui-core` committed files predates this batch and is
     out of scope here)
@@ -58,12 +60,18 @@
 - Determinism: all job/manifest timestamps are explicit `DateTime<Utc>` passed
   from the caller; journal events carry only seq + type + engine output.
 - Zero `#[cfg(test)]` inside `crates/*/src/`; tests live in `<crate>/tests/`.
-- Registry ops order per run: claim → pool dispatch → release_lease →
-  record_usage (breach/manual wins over lease) → advance cron cursor; cron
-  evaluation via the runtime `JobScheduler` (`cron` crate, Vixie dom/dow OR).
-- Determinism: all job/manifest timestamps are explicit `DateTime<Utc>` passed
-  from the caller; journal events carry only seq + type + engine output.
-- Zero `#[cfg(test)]` inside `crates/*/src/`; tests live in `<crate>/tests/`.
+- **`vyapaar serve` added** — `vyapaar-runtime-api-rest::bootstrap::{ServeConfig,
+  run_server_blocking}` was a complete, tested library with no binary ever calling it
+  (same gap existed in `honba-ya`); `vyapaar-cli` already depended on the crate. Added
+  `Command::Serve(ServeArgs)` (`args.rs`), `run_serve` (`runner.rs`) mapping CLI flags
+  (`data_dir` positional, `--addr`, `--cors-origin`, `--profiles-dir`, `--portfolios-dir`,
+  `--journals-dir`, `--tokens-file`) onto `ServeConfig`, and the `ServeSuccess` outcome
+  (`main.rs`). Smoke-tested against `vyapaar-data/data` (empty catalog): binds, serves
+  `GET /profile` over real HTTP, shuts down cleanly on signal. `vyapaar-ui-web`'s
+  `settings`/`alerts` stores are being wired to the now-reachable `/profile` API in the
+  same batch (see that repo's own HANDOFF/gaps); `watchlists`/`portfolios`/
+  `risk-profiles`/`workspaces` don't fit the current `Profile` schema — tracked as
+  `vyapaar-runtime/docs/gaps/0004`.
 
 ## 3. Immediate Next Steps
 1. Leptos view layer for `vyapaar-ui-app` (feature state models are done; no CSR

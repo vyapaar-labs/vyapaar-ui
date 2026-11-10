@@ -70,6 +70,7 @@ fn main() -> ExitCode {
                 CommandOutcome::PurgeSuccess(msg) => println!("{msg}"),
                 CommandOutcome::HealthReport(report) => println!("{report}"),
                 CommandOutcome::StrategySuccess(msg) => println!("{msg}"),
+                CommandOutcome::ServeSuccess(msg) => println!("{msg}"),
             }
             ExitCode::SUCCESS
         }

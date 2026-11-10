@@ -1,6 +1,7 @@
 //! CLI argument parsing (clap derive) implementing the Quantcept command hierarchy.
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 /// Log levels for CLI output.
@@ -100,6 +101,32 @@ pub struct ChatArgs {
 pub struct ScanArgs {
     /// The screener query (e.g. `"roe>15 and pe between 10 30"`).
     pub query: String,
+}
+
+/// Arguments for `vyapaar serve`: boots `vyapaar-runtime-api-rest` as a standalone HTTP server
+/// (market data, orders, `/profile` persistent-store routes) until `Ctrl-C`/`SIGTERM`.
+#[derive(Debug, Clone, PartialEq, Eq, Args)]
+pub struct ServeArgs {
+    /// Market data directory (a `catalog/` tree or flat `SYMBOL.EXCHANGE.parquet` files).
+    pub data_dir: PathBuf,
+    /// Socket address to bind.
+    #[arg(long, default_value = "127.0.0.1:8000")]
+    pub addr: SocketAddr,
+    /// Allowed CORS origin (repeatable); omit to disable CORS.
+    #[arg(long = "cors-origin")]
+    pub cors_origin: Vec<String>,
+    /// Directory holding one JSON profile per user (`/profile` routes). Default `data/profiles`.
+    #[arg(long)]
+    pub profiles_dir: Option<PathBuf>,
+    /// Directory holding one JSON portfolio per user (`/portfolio` routes). Default `data/portfolios`.
+    #[arg(long)]
+    pub portfolios_dir: Option<PathBuf>,
+    /// Directory holding one sub-directory per backtest run. Default `data/journals`.
+    #[arg(long)]
+    pub journals_dir: Option<PathBuf>,
+    /// Bearer-token file (TOML); enables auth when set. Omit to run with auth off.
+    #[arg(long)]
+    pub tokens_file: Option<PathBuf>,
 }
 
 /// Arguments for `vyapaar jobs`.
@@ -310,6 +337,8 @@ pub enum Command {
     Chat(ChatArgs),
     /// Run a screener scan.
     Scan(ScanArgs),
+    /// Boot the `vyapaar-runtime-api-rest` HTTP server.
+    Serve(ServeArgs),
     /// Manage autonomous scheduled jobs and approvals.
     Jobs(JobsArgs),
     /// Verify a strategy file for lookahead bias and data leakage.
@@ -516,6 +545,29 @@ pub enum CliCommand {
     Scan {
         /// The screener query.
         query: String,
+    },
+    /// Boot the `vyapaar-runtime-api-rest` HTTP server.
+    Serve {
+        /// Market data directory (a `catalog/` tree or flat `SYMBOL.EXCHANGE.parquet` files).
+        data_dir: PathBuf,
+        /// Socket address to bind.
+        #[arg(long, default_value = "127.0.0.1:8000")]
+        addr: SocketAddr,
+        /// Allowed CORS origin (repeatable); omit to disable CORS.
+        #[arg(long = "cors-origin")]
+        cors_origin: Vec<String>,
+        /// Directory holding one JSON profile per user (`/profile` routes). Default `data/profiles`.
+        #[arg(long)]
+        profiles_dir: Option<PathBuf>,
+        /// Directory holding one JSON portfolio per user (`/portfolio` routes). Default `data/portfolios`.
+        #[arg(long)]
+        portfolios_dir: Option<PathBuf>,
+        /// Directory holding one sub-directory per backtest run. Default `data/journals`.
+        #[arg(long)]
+        journals_dir: Option<PathBuf>,
+        /// Bearer-token file (TOML); enables auth when set. Omit to run with auth off.
+        #[arg(long)]
+        tokens_file: Option<PathBuf>,
     },
     /// Manage autonomous scheduled jobs and approvals.
     Jobs {
@@ -870,6 +922,23 @@ impl From<Cli> for CliArgs {
             }),
             Some(CliCommand::Chat { system_prompt }) => Command::Chat(ChatArgs { system_prompt }),
             Some(CliCommand::Scan { query }) => Command::Scan(ScanArgs { query }),
+            Some(CliCommand::Serve {
+                data_dir,
+                addr,
+                cors_origin,
+                profiles_dir,
+                portfolios_dir,
+                journals_dir,
+                tokens_file,
+            }) => Command::Serve(ServeArgs {
+                data_dir,
+                addr,
+                cors_origin,
+                profiles_dir,
+                portfolios_dir,
+                journals_dir,
+                tokens_file,
+            }),
             Some(CliCommand::Jobs { subcommand }) => Command::Jobs(match subcommand {
                 None | Some(JobsSubcommand::List) => JobsArgs::List,
                 Some(JobsSubcommand::Add {
