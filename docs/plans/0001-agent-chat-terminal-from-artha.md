@@ -14,9 +14,9 @@
 
 A separate session designed a from-scratch Rust rewrite of a local-first AI finance chat
 terminal, under the working name **Artha**, as a 12-crate workspace at
-`/home/pmallapp/tmp/artha/` (pushed to `git@github.com:dev-pmallapp/artha.git`). Partway
+`~/tmp/artha/` (pushed to `git@github.com:dev-pmallapp/artha.git`). Partway
 through writing detailed HLD/LLD design docs crate by crate, it turned out `vyapaar-labs`
-already exists at `/home/pmallapp/Devel/Finance/vyapaar-labs` — a much larger, already-planned
+already exists at `vyapaar-labs` — a much larger, already-planned
 "autonomous algorithmic trading platform for NSE/BSE" — and that **`vyapaar-ui`'s own migration
 guide already reserves three crates, `vyapaar-cli`, `vyapaar-tui`, and `vyapaar-highlight`, as
 brand-new (no port source), currently just empty stubs**, for exactly this kind of terminal
@@ -66,7 +66,7 @@ assume:
 
 ## 2. What's actually done in `artha`, and where it's directly useful
 
-All of this lives at `/home/pmallapp/tmp/artha/crates/<name>/docs/{HLD,LLD}.md`
+All of this lives at `~/tmp/artha/crates/<name>/docs/{HLD,LLD}.md`
 (also on GitHub: `dev-pmallapp/artha`, branch `main`).
 
 | `artha` crate | Status | Where it's useful here |

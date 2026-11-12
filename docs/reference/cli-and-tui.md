@@ -1,7 +1,7 @@
 # Vyapaar Workstation: CLI & TUI Slash Commands Reference
 
 > **Standards Alignment**: Quantcept CLI Specification ([CLI Reference](https://quantcept.io/docs/reference/cli), [Slash Commands](https://quantcept.io/docs/cli/commands))  
-> **Crates**: [`vyapaar-cli`](file:///home/pmallapp/Devel/Finance/vyapaar-labs/vyapaar-ui/crates/vyapaar-cli), [`vyapaar-tui`](file:///home/pmallapp/Devel/Finance/vyapaar-labs/vyapaar-ui/crates/vyapaar-tui), [`vyapaar-highlight`](file:///home/pmallapp/Devel/Finance/vyapaar-labs/vyapaar-ui/crates/vyapaar-highlight)  
+> **Crates**: [`vyapaar-cli`](../../crates/vyapaar-cli), [`vyapaar-tui`](../../crates/vyapaar-tui), [`vyapaar-highlight`](../../crates/vyapaar-highlight)  
 > **Target Platforms**: Linux, macOS, Windows (native binary `vyapaar`)
 
 ---

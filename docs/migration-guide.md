@@ -1,8 +1,8 @@
 # `vyapaar-ui` — Subagent Migration & DDD Refactoring Guide
 
 > **Tier**: Tier 5A (Depends on `vyapaar-core`)
-> **Source**: `/home/pmallapp/Devel/Finance/honba-workspace/honba-kao`
-> **Target**: `/home/pmallapp/Devel/Finance/vyapaar-labs/vyapaar-ui`
+> **Source**: `honba-workspace/honba-kao`
+> **Target**: `vyapaar-ui`
 > **Status**: ✅ **TIER 5 COMPLETE** — verification gate green (2026-11-05)
 
 ---
@@ -31,7 +31,7 @@
 
 ## 3. Verification Commands
 ```bash
-cd /home/pmallapp/Devel/Finance/vyapaar-labs/vyapaar-ui
+# Run from the repository root
 grep -rn "#\[cfg(test)\]" crates/*/src/ && exit 1 || true
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
@@ -42,7 +42,7 @@ cargo check -p vyapaar-ui-app --target wasm32-unknown-unknown
 ## 4. Migration Notes (2026-11-05)
 
 The honba-kao source tree was **not available** in the migration environment
-(`/home/pmallapp/Devel/Finance/honba-workspace` absent), so all nine crates
+(`honba-workspace` absent), so all nine crates
 were implemented **fresh against the contracts in this guide and
 `docs/plans/0001-agent-chat-terminal-from-artha.md`** rather than ported
 line-for-line. The workspace shape, crate boundaries, test-suite names, and
