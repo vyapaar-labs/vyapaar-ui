@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 520" width="100%" height="100%">
+  <!-- Standalone T Icon: Dark Mode (White Bar, Emerald Candlestick, Transparent Background) -->
+  <g id="tantra-icon-dark">
+    <!-- Top Bar: Flat top, rounded 90-degree corners, symmetrical wrap-around -->
+    <path d="M 230 150
+             L 770 150
+             A 50 50 0 0 1 820 200
+             L 820 220
+             A 50 50 0 0 1 770 270
+             L 640 270
+             A 20 20 0 0 1 640 230
+             L 770 230
+             A 10 10 0 0 0 780 220
+             L 780 200
+             A 10 10 0 0 0 770 190
+             L 230 190
+             A 10 10 0 0 0 220 200
+             L 220 220
+             A 10 10 0 0 0 230 230
+             L 360 230
+             A 20 20 0 0 1 360 270
+             L 230 270
+             A 50 50 0 0 1 180 220
+             L 180 200
+             A 50 50 0 0 1 230 150 Z" fill="#FFFFFF" />
+
+    <!-- Top Wick: Centered, stops short of top bar with a clean gap (no bottom wick) -->
+    <rect x="495" y="195" width="10" height="30" rx="3" fill="#00C076" />
+
+    <!-- Candlestick Body: Flat emerald green (no glow) -->
+    <rect x="470" y="225" width="60" height="175" rx="4" fill="#00C076" />
+  </g>
+</svg>
